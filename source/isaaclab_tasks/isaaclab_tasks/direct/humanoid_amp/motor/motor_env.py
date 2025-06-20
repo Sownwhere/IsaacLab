@@ -43,13 +43,13 @@ class MotorEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=1.0, replicate_physics=True)
 
     # reset
-    max_cart_pos = 100.0  # the cart is reset if it exceeds that position [m]
-    initial_pole_angle_range = [-0.25, 0.25]  # the range in which the pole angle is sampled from on reset [rad]
+    max_cart_pos = 10000.0  # the cart is reset if it exceeds that position [m]
+    initial_pole_angle_range = [-1, 1]  # the range in which the pole angle is sampled from on reset [rad]
 
     # reward scales
     rew_scale_alive = 1.0
     rew_scale_terminated = -2.0
-    velocity_scale = 0.00001
+    velocity_scale = 0.01
 
 class MotorEnv(DirectRLEnv):
     cfg: MotorEnvCfg
@@ -81,8 +81,6 @@ class MotorEnv(DirectRLEnv):
         # print(self.actions.shape)
 
     def _apply_action(self) -> None:
-        self.actions[:,0] =0.001
-        self.actions[:,1] =0.0
         self.Motor.set_joint_effort_target(self.actions[:,0].unsqueeze(-1), joint_ids=self._motor1_idx)
         self.Motor.set_joint_effort_target(self.actions[:,1].unsqueeze(-1), joint_ids=self._motor2_idx)
 
@@ -118,7 +116,7 @@ class MotorEnv(DirectRLEnv):
 
         time_out = self.episode_length_buf >= self.max_episode_length - 1
         out_of_bounds = torch.any(torch.abs(self.joint_pos[:, self._motor1_idx]) > self.cfg.max_cart_pos, dim=1)
-        out_of_bounds = out_of_bounds | torch.any(self.joint_vel[:, :] < 0, dim=1)
+        out_of_bounds = out_of_bounds | torch.any(self.joint_vel[:, self._motor2_idx] < 0, dim=1)
 
         # out_of_bounds = out_of_bounds | torch.any(torch.abs(self.joint_pos[:, self._motor2_idx]) > math.pi / 2, dim=1)
         return out_of_bounds, time_out
@@ -163,14 +161,14 @@ def compute_rewards(
     rew_termination = rew_scale_terminated * reset_terminated.float()
     #当速度等于0.2 的时候，奖励最大
     # ✅ 新增：速度接近1时的奖励、
-    velocity_error = torch.square(cart_vel - 20.0)
-    target_speed_reward = torch.clamp(10000.0 - velocity_error, min=-3.0)  # 保证非负
-    rew_target_speed = velocity_scale * target_speed_reward.squeeze(-1) * 100 
+    velocity_error = torch.square(cart_vel - 0.5)
+    target_speed_reward = torch.clamp(100.0 - velocity_error, min=-100.0)  # 保证非负
+    rew_target_speed = velocity_scale * target_speed_reward.squeeze(-1) 
     # print("rew_target_speed", rew_target_speed)
     # ✅ 新增： pole_pos  = 0 奖励最大
-    # pole_pos_reward = torch.square(pole_pos - 1)
-    # rew_pole_pos = torch.clamp(3.14 - pole_pos_reward, min=-2.0)
+    pole_pos_reward = torch.square(pole_pos - 1)
+    rew_pole_pos = torch.clamp(10 - pole_pos_reward, min=-10.0)
     # # print("rew_pole_pos", rew_pole_pos.shape)
 
-    total_reward = rew_target_speed  + rew_alive + rew_termination
+    total_reward = rew_target_speed  + rew_alive + rew_termination + rew_pole_pos
     return total_reward

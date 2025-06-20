@@ -42,14 +42,14 @@ MOTOR_CFG = ArticulationCfg(
             effort_limit=400.0,
             velocity_limit=100.0,
             stiffness=0.0,
-            damping=10.0,
+            damping=1.0,
         ),
         "motor2_actuator": ImplicitActuatorCfg(
             joint_names_expr=["motor2_joint"],
             effort_limit=400.0,
             velocity_limit=100.0,
             stiffness=0.0,
-            damping=10.0,
+            damping=1.0,
         ),
     },
 )
