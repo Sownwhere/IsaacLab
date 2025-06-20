@@ -1,0 +1,6 @@
+__pycache__/
+# 忽略 Python 编译文件
+
+*.cpython-310.pyc
+*.pyc
+__pycache__/

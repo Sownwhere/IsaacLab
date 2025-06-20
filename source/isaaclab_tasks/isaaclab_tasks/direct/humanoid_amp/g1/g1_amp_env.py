@@ -15,14 +15,14 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_rotate
 
-from .humanoid_amp_env_cfg import HumanoidAmpEnvCfg
-from .motions import MotionLoader
+from .g1_amp_env_cfg import G1AmpEnvCfg
+from ..motions.python import MotionLoader
 
 
-class HumanoidAmpEnv(DirectRLEnv):
-    cfg: HumanoidAmpEnvCfg
+class G1AmpEnv(DirectRLEnv):
+    cfg: G1AmpEnvCfg
 
-    def __init__(self, cfg: HumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: G1AmpEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         # action offset and scale
@@ -30,14 +30,34 @@ class HumanoidAmpEnv(DirectRLEnv):
         dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
         self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
         self.action_scale = dof_upper_limits - dof_lower_limits
+        # self.pre_actions = torch.zeros((self.num_envs, self.cfg.action_space), device=self.device)
+        # print("DOF LIMITS")
+        # print(dof_lower_limits)
+        # print(dof_upper_limits)
 
         # load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
 
-        # DOF and key body indexes
-        key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
+        # DOF and key body indexes  
+        # key_body_names = ["pelvis"]  
+        key_body_names = [ "left_shoulder_pitch_link",
+            "right_shoulder_pitch_link",
+            "left_elbow_link",
+            "right_elbow_link",
+            "right_hip_yaw_link",
+            "left_hip_yaw_link",
+            "right_rubber_hand",
+            "left_rubber_hand",
+            "right_ankle_roll_link",
+            "left_ankle_roll_link"]
+        # key_body_names = [
+        #     "right_rubber_hand",
+        #     "left_rubber_hand",
+        #     "right_ankle_roll_link",
+        #     "left_ankle_roll_link"]
         self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
         self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
+        # Used to for reset strategy
         self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
         self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
         self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
@@ -72,8 +92,10 @@ class HumanoidAmpEnv(DirectRLEnv):
 
     def _pre_physics_step(self, actions: torch.Tensor):
         self.actions = actions.clone()
+        # self.pre_actions = actions.clone()
 
     def _apply_action(self):
+        # self.pre_actions = self.actions.clone()
         target = self.action_offset + self.action_scale * self.actions
         self.robot.set_joint_position_target(target)
 
@@ -98,8 +120,24 @@ class HumanoidAmpEnv(DirectRLEnv):
 
         return {"policy": obs}
 
+    # def _get_rewards(self) -> torch.Tensor:
+    #     return torch.ones((self.num_envs,), dtype=torch.float32, device=self.sim.device)
     def _get_rewards(self) -> torch.Tensor:
-        return torch.ones((self.num_envs,), dtype=torch.float32, device=self.sim.device)
+        total_reward, reward_log = compute_rewards(
+            self.cfg.rew_termination,
+            self.cfg.rew_action_l2,
+            self.cfg.rew_joint_pos_limits,
+            self.cfg.rew_joint_acc_l2,
+            self.cfg.rew_joint_vel_l2,
+            self.reset_terminated,
+            self.actions,
+            self.robot.data.joint_pos,
+            self.robot.data.soft_joint_pos_limits,
+            self.robot.data.joint_acc,
+            self.robot.data.joint_vel,    
+        )
+        self.extras["log"] = reward_log
+        return total_reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         time_out = self.episode_length_buf >= self.max_episode_length - 1
@@ -153,10 +191,10 @@ class HumanoidAmpEnv(DirectRLEnv):
         ) = self._motion_loader.sample(num_samples=num_samples, times=times)
 
         # get root transforms (the humanoid torso)
-        motion_torso_index = self._motion_loader.get_body_index(["torso"])[0]
+        motion_torso_index = self._motion_loader.get_body_index(["pelvis"])[0]
         root_state = self.robot.data.default_root_state[env_ids].clone()
         root_state[:, 0:3] = body_positions[:, motion_torso_index] + self.scene.env_origins[env_ids]
-        root_state[:, 2] += 0.15  # lift the humanoid slightly to avoid collisions with the ground
+        root_state[:, 2] += 0.05  # lift the humanoid slightly to avoid collisions with the ground
         root_state[:, 3:7] = body_rotations[:, motion_torso_index]
         root_state[:, 7:10] = body_linear_velocities[:, motion_torso_index]
         root_state[:, 10:13] = body_angular_velocities[:, motion_torso_index]
@@ -236,3 +274,36 @@ def compute_obs(
         dim=-1,
     )
     return obs
+@torch.jit.script
+def compute_rewards(
+    rew_scale_termination: float,
+    rew_scale_action_l2: float,
+    rew_scale_joint_pos_limits: float,
+    rew_scale_joint_acc_l2: float,
+    rew_scale_joint_vel_l2: float,
+    reset_terminated: torch.Tensor,
+    actions: torch.Tensor,
+    joint_pos: torch.Tensor,
+    soft_joint_pos_limits: torch.Tensor,
+    joint_acc: torch.Tensor,
+    joint_vel: torch.Tensor,
+):
+    rew_termination = rew_scale_termination * reset_terminated.float()
+    rew_action_l2 = rew_scale_action_l2 * torch.sum(torch.square(actions), dim=1)
+    
+    out_of_limits = -(joint_pos - soft_joint_pos_limits[:,:,0]).clip(max=0.0)
+    out_of_limits += (joint_pos - soft_joint_pos_limits[:,:,1]).clip(min=0.0)
+    rew_joint_pos_limits = rew_scale_joint_pos_limits * torch.sum(out_of_limits, dim=1)
+    
+    rew_joint_acc_l2 = rew_scale_joint_acc_l2 * torch.sum(torch.square(joint_acc), dim=1)
+    rew_joint_vel_l2 = rew_scale_joint_vel_l2 * torch.sum(torch.square(joint_vel), dim=1)
+    total_reward = rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2
+    
+    log = {
+        "rew_termination": (rew_termination).mean(),
+        "rew_action_l2": (rew_action_l2).mean(),
+        "rew_joint_pos_limits": (rew_joint_pos_limits).mean(),
+        "rew_joint_acc_l2": (rew_joint_acc_l2).mean(),
+        "rew_joint_vel_l2": (rew_joint_vel_l2).mean(),
+        }
+    return total_reward, log

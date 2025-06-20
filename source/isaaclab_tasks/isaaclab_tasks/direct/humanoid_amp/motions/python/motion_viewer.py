@@ -10,11 +10,7 @@ import numpy as np
 import torch
 
 import mpl_toolkits.mplot3d  # noqa: F401
-
-try:
-    from .motion_loader import MotionLoader
-except ImportError:
-    from motion_loader import MotionLoader
+from motion_loader import MotionLoader
 
 
 class MotionViewer:
@@ -58,7 +54,31 @@ class MotionViewer:
         vertices = self._body_positions[self._current_frame]
         # draw skeleton state
         self._figure_axes.clear()
-        self._figure_axes.scatter(*vertices.T, color="black", depthshade=False)
+        # body_names = [
+        # "pelvis", 
+        # "head_link",
+        # "left_shoulder_pitch_link",
+        # "right_shoulder_pitch_link",
+        # "left_elbow_link",
+        # "right_elbow_link",
+        # "right_hip_yaw_link",
+        # "left_hip_yaw_link",
+        # "right_rubber_hand",
+        # "left_rubber_hand",
+        # "right_ankle_roll_link",
+        # "left_ankle_roll_link"]
+
+        colors = ["black"] * len(vertices)
+        colors[0] = "red"
+        colors[1] = "blue"
+        colors[2] = "blue"
+        # colors[5] = "purple"
+        colors[-1] = "green"
+        colors[-2] = "green"
+        colors[-3] = "yellow"
+        colors[-4] = "yellow"
+        self._figure_axes.scatter(*vertices.T, color=colors, depthshade=False)
+        # self._figure_axes.scatter(*vertices.T, color="black", depthshade=False)
         # adjust exes according to motion view
         # - scene
         if self._render_scene:
@@ -111,7 +131,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--file", type=str, required=True, help="Motion file")
+    # parser.add_argument("--file", type=str, required=False, default="../bw_walk_npy/bw_self.npz", help="Motion file")
+    parser.add_argument("--file", type=str, required=False, default="../bw_walk_npy/bw.npz", help="Motion file")
     parser.add_argument(
         "--render-scene",
         action="store_true",
@@ -122,6 +143,7 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument("--matplotlib-backend", type=str, default="TkAgg", help="Matplotlib interactive backend")
+    
     args, _ = parser.parse_known_args()
 
     # https://matplotlib.org/stable/users/explain/figure/backends.html#interactive-backends
