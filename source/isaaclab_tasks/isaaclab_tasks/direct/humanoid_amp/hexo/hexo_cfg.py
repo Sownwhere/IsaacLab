@@ -7,10 +7,10 @@ import os
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-BWEXO_CFG = ArticulationCfg(
+HEXO_CFG = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=os.path.join(CURRENT_DIR, "../usd/bw.usd"),
+            usd_path=os.path.join(CURRENT_DIR, "../usd/bw_static/bw.usd"),
             activate_contact_sensors=True,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 disable_gravity=False,
@@ -72,4 +72,4 @@ BWEXO_CFG = ArticulationCfg(
                 # armature=0.01,
             ),
         },
-    )
+    )   
