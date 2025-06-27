@@ -29,6 +29,18 @@ gym.register(
 
 
 gym.register(
+    id="Bw-Exo",
+    entry_point=f"{__name__}.bw_exo_amp.bw_exo_amp_env:BwExoAmpEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.bw_exo_amp.bw_exo_amp_env_cfg:BwExoAmpWalkEnvCfg",
+        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_bw_exo_amp_cfg.yaml",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_bw_exo_amp_cfg.yaml",
+    },
+)
+
+
+gym.register(
     id="exo",
     entry_point=f"{__name__}.exo.bw_exo_env:BwExoEnv",
     disable_env_checker=True,
@@ -65,15 +77,10 @@ gym.register(
     entry_point=f"{__name__}.hexo.hexo_env:HexoEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.hexo.hexo_env_cfg:HexoWalkEnvCfg",
-        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_hexo_cfg.yaml",
+        "env_cfg_entry_point": f"{__name__}.hexo.hexo_env_cfg:HexoEnvCfg",
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
         "skrl_ippo_cfg_entry_point": f"{agents.__name__}:skrl_ippo_cfg.yaml",
         "skrl_mappo_cfg_entry_point": f"{agents.__name__}:skrl_mappo_cfg.yaml",
-
-
-        
-        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_hexo_cfg.yaml",
     },
 )

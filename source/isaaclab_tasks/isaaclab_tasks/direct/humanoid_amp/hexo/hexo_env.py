@@ -9,86 +9,30 @@ import math
 import torch
 from collections.abc import Sequence
 
-import gymnasium as gym
-import numpy as np
+
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectMARLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import sample_uniform
 from .hexo_env_cfg import HexoEnvCfg
-from ..motions.python import MotionLoader
 
 class HexoEnv(DirectMARLEnv):
-    
     cfg: HexoEnvCfg
-    def collect_reference_motions(self, num_samples: int) -> torch.Tensor:
-        return self._motion_loader.sample_states(num_samples)
+
     def __init__(self, cfg: HexoEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        
         self._humanoid_dof_idx, _ = self.robot.find_joints(self.cfg.humanoid_dof_name)
         self._exo_dof_idx, _ = self.robot.find_joints(self.cfg.exo_dof_name)
 
-        # action offset and scale
-        dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
-        dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
-        self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
-        self.action_scale = dof_upper_limits - dof_lower_limits
-
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
-                
-        # load motion
-        self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
-
-        # DOF and key body indexes  
-        # key_body_names = ["base_link"]  
-        key_body_names = [ 
-            # 'left_leg_pitch_link',
-            # 'left_leg_roll_link',
-            'left_leg_yaw_link',
-            'left_knee_link',
-            # 'left_ankle_pitch_link',
-            'left_ankle_roll_link',
-
-            # 'right_leg_pitch_link',
-            # 'right_leg_roll_link',
-            'right_leg_yaw_link',
-            'right_knee_link',
-            # 'right_ankle_pitch_link',
-            'right_ankle_roll_link',
-        ]
-        self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
-        self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
-        # Used to for reset strategy
-        self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
-        self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
-        self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
-
-        # reconfigure AMP observation space according to the number of observations and create the buffer
-        self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space
-        self.amp_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.amp_observation_size,))
-        self.amp_observation_buffer = torch.zeros(
-            (self.num_envs, self.cfg.num_amp_observations, self.cfg.amp_observation_space), device=self.device
-        )
-
-
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
         # add ground plane
-        spawn_ground_plane(
-            prim_path="/World/ground",
-            cfg=GroundPlaneCfg(
-                physics_material=sim_utils.RigidBodyMaterialCfg(
-                    static_friction=1.0,
-                    dynamic_friction=1.0,
-                    restitution=0.0,
-                ),
-            ),
-        )
+        spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
         # clone and replicate
         self.scene.clone_environments(copy_from_source=False)
         # add articulation to scene
