@@ -41,7 +41,7 @@ parser.add_argument(
     "--algorithm",
     type=str,
     default="PPO",
-    choices=["AMP", "PPO", "IPPO", "MAPPO"],
+    choices=["AMP", "PPO", "IPPO", "MAPPO", "MAAMP"],
     help="The RL algorithm used for training the skrl agent.",
 )
 
@@ -180,6 +180,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # wrap around environment for skrl
     env = SkrlVecEnvWrapper(env, ml_framework=args_cli.ml_framework)  # same as: `wrap_env(env, wrapper="auto")`
+    # ✅ monkey patch 解决 collect_reference_motions 缺失问题
+    if hasattr(env, "env") and hasattr(env.env, "collect_reference_motions"):
+        env.collect_reference_motions = lambda num_samples, current_times=None: env.env.collect_reference_motions(num_samples, current_times)
+        
+    print("collect_reference_motions in env?", hasattr(env, "collect_reference_motions"))
 
     # configure and instantiate the skrl runner
     # https://skrl.readthedocs.io/en/latest/api/utils/runner.html

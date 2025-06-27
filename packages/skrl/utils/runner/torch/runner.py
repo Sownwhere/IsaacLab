@@ -134,6 +134,11 @@ class Runner:
 
             component = TRPO_DEFAULT_CONFIG if "default_config" in name else TRPO
         # multi-agent
+        # Bw
+        elif name in ["MAAMP", "maamp_default_config"]:
+            from skrl.multi_agents.torch.maamp import MAAMP, MAAMP_DEFAULT_CONFIG
+            component = MAAMP_DEFAULT_CONFIG if "default_config" in name else MAAMP
+            
         elif name in ["ippo", "ippo_default_config"]:
             from skrl.multi_agents.torch.ippo import IPPO, IPPO_DEFAULT_CONFIG
 

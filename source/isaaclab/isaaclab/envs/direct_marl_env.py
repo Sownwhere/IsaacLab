@@ -166,7 +166,7 @@ class DirectMARLEnv(gym.Env):
             # if no window, then we don't need to store the window
             self._window = None
 
-        # allocate dictionary to store metrics
+        # allocate dictionary to store metrics       BW 2025-06-25  
         self.extras = {agent: {} for agent in self.cfg.possible_agents}
 
         # initialize data and constants

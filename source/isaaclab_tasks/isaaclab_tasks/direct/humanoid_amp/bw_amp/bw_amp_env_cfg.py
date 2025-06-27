@@ -22,6 +22,16 @@ MOTIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../motio
 @configclass
 class BwAmpEnvCfg(DirectRLEnvCfg):
     """Humanoid AMP environment config (base class)."""
+
+
+    #     # env
+    # decimation = 2
+    # episode_length_s = 5.0
+    # possible_agents = ["humanoid", "exo"]
+    # action_spaces = {"humanoid": 1, "exo": 1}
+    # observation_spaces = {"humanoid": 2, "exo": 2}
+    # state_space = -1
+
     
     # reward
     rew_termination = -1.0

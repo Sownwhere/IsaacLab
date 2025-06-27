@@ -17,7 +17,7 @@ from . import agents
 ##
 
 gym.register(
-    id="Isaac-Bw-AMP-Walk-Direct-v0",
+    id="Bw",
     entry_point=f"{__name__}.bw_amp.bw_amp_env:BwAmpEnv",
     disable_env_checker=True,
     kwargs={
