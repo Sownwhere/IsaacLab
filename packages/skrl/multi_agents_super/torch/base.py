@@ -16,7 +16,7 @@ from skrl.memories.torch import Memory
 from skrl.models.torch import Model
 
 
-class MultiAgent:
+class MultiAgentSuper:
     def __init__(
         self,
         possible_agents: Sequence[str],

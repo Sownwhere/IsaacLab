@@ -135,10 +135,14 @@ class Runner:
             component = TRPO_DEFAULT_CONFIG if "default_config" in name else TRPO
         # multi-agent
         # Bw
-        elif name in ["MAAMP", "maamp_default_config"]:
-            from skrl.multi_agents.torch.maamp import MAAMP, MAAMP_DEFAULT_CONFIG
-            component = MAAMP_DEFAULT_CONFIG if "default_config" in name else MAAMP
-            
+        # elif name in ["MAAMP", "maamp_default_config"]:
+        #     from skrl.multi_agents_super.torch.maamp import MAAMP, MAAMP_DEFAULT_CONFIG
+        #     component = MAAMP_DEFAULT_CONFIG if "default_config" in name else MAAMP
+
+        elif name in ["mippo", "mippo_default_config"]:
+            from skrl.multi_agents_super.torch.mippo import MIPPO, MIPPO_DEFAULT_CONFIG
+            component = MIPPO_DEFAULT_CONFIG if "default_config" in name else MIPPO
+
         elif name in ["ippo", "ippo_default_config"]:
             from skrl.multi_agents.torch.ippo import IPPO, IPPO_DEFAULT_CONFIG
 
@@ -438,6 +442,21 @@ class Runner:
             }
         # multi-agent configuration and instantiation
         elif agent_class in ["ippo"]:
+            agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+            agent_cfg.update(self._process_cfg(cfg["agent"]))
+            agent_cfg["state_preprocessor_kwargs"].update(
+                {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
+            )
+            agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+            agent_kwargs = {
+                "models": models,
+                "memories": memories,
+                "observation_spaces": observation_spaces,
+                "action_spaces": action_spaces,
+                "possible_agents": possible_agents,
+            }
+        #bw
+        elif agent_class in ["mippo"]:
             agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
             agent_cfg.update(self._process_cfg(cfg["agent"]))
             agent_cfg["state_preprocessor_kwargs"].update(
