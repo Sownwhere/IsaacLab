@@ -103,6 +103,7 @@ class MIPPO(MultiAgentSuper):
         """
         _cfg = copy.deepcopy(MIPPO_DEFAULT_CONFIG)
         _cfg.update(cfg if cfg is not None else {})
+
         super().__init__(
             possible_agents=possible_agents,
             models=models,

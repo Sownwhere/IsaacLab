@@ -223,24 +223,35 @@ class Runner:
             _cfg = copy.deepcopy(cfg)
             models[agent_id] = {}
             models_cfg = _cfg.get("models")
+
+            # 从每个 agent 的配置中读取模型结构
+            all_models_cfg = copy.deepcopy(cfg.get("models", {}))
+            models_cfg = all_models_cfg.get(agent_id, {})
+
+            # 判断是“老格式”（统一配置）还是“新格式”（每个 agent 单独配置）
+            if any(agent_id in all_models_cfg for agent_id in possible_agents):
+                # ✅ 新格式：每个 agent 一个配置（推荐）
+                models_cfg = all_models_cfg.get(agent_id, {})
+            else:
+                # ✅ 旧格式：所有 agent 使用相同配置
+                models_cfg = copy.deepcopy(all_models_cfg)
+
             if not models_cfg:
-                raise ValueError("No 'models' are defined in cfg")
+                raise ValueError(f"No model configuration found for agent '{agent_id}' in cfg['models']")
+
             # get separate (non-shared) configuration and remove 'separate' key
-            try:
-                separate = models_cfg["separate"]
-                del models_cfg["separate"]
-            except KeyError:
-                separate = True
-                logger.warning("No 'separate' field defined in 'models' cfg. Defining it as True by default")
-            # non-shared models
-            if separate:
+            separate = models_cfg.pop("separate", True)
+            multi_policy = models_cfg.pop("multi_policy", False)
+
+            if multi_policy:
+
                 for role in models_cfg:
                     # get instantiator function and remove 'class' key
-                    model_class = models_cfg[role].get("class")
-                    if not model_class:
+                    model_class_name = models_cfg[role].pop("class", None)
+                    if not model_class_name:
                         raise ValueError(f"No 'class' field defined in 'models:{role}' cfg")
                     del models_cfg[role]["class"]
-                    model_class = self._component(model_class)
+                    model_class = self._component(model_class_name)
                     # get specific spaces according to agent/model cfg
                     observation_space = observation_spaces[agent_id]
                     if agent_class == "mappo" and role == "value":
@@ -261,7 +272,7 @@ class Runner:
                         return_source=True,
                     )
                     print("==================================================")
-                    print(f"Model (role): {role}")
+                    print(f"Model (agent: {agent_id}, role: {role})")
                     print("==================================================\n")
                     print(source)
                     print("--------------------------------------------------")
@@ -272,51 +283,93 @@ class Runner:
                         device=device,
                         **self._process_cfg(models_cfg[role]),
                     )
-            # shared models
+
             else:
-                roles = list(models_cfg.keys())
-                if len(roles) != 2:
-                    raise ValueError(
-                        "Runner currently only supports shared models, made up of exactly two models. "
-                        "Set 'separate' field to True to create non-shared models for the given cfg"
+            # non-shared models
+                if separate:
+                    for role in models_cfg:
+                        # get instantiator function and remove 'class' key
+                        model_class = models_cfg[role].get("class")
+                        if not model_class:
+                            raise ValueError(f"No 'class' field defined in 'models:{role}' cfg")
+                        del models_cfg[role]["class"]
+                        model_class = self._component(model_class)
+                        # get specific spaces according to agent/model cfg
+                        observation_space = observation_spaces[agent_id]
+                        if agent_class == "mappo" and role == "value":
+                            observation_space = state_spaces[agent_id]
+                        if agent_class == "amp" and role == "discriminator":
+                            try:
+                                observation_space = env.amp_observation_space
+                            except Exception as e:
+                                logger.warning(
+                                    "Unable to get AMP space via 'env.amp_observation_space'. Using 'env.observation_space' instead"
+                                )
+                        # print model source
+                        source = model_class(
+                            observation_space=observation_space,
+                            action_space=action_spaces[agent_id],
+                            device=device,
+                            **self._process_cfg(models_cfg[role]),
+                            return_source=True,
+                        )
+                        print("==================================================")
+                        print(f"Model (role): {role}")
+                        print("==================================================\n")
+                        print(source)
+                        print("--------------------------------------------------")
+                        # # instantiate model
+                        models[agent_id][role] = model_class(
+                            observation_space=observation_space,
+                            action_space=action_spaces[agent_id],
+                            device=device,
+                            **self._process_cfg(models_cfg[role]),
+                        )
+                # shared models
+                else:
+                    roles = list(models_cfg.keys())
+                    if len(roles) != 2:
+                        raise ValueError(
+                            "Runner currently only supports shared models, made up of exactly two models. "
+                            "Set 'separate' field to True to create non-shared models for the given cfg"
+                        )
+                    # get shared model structure and parameters
+                    structure = []
+                    parameters = []
+                    for role in roles:
+                        # get instantiator function and remove 'class' key
+                        model_structure = models_cfg[role].get("class")
+                        if not model_structure:
+                            raise ValueError(f"No 'class' field defined in 'models:{role}' cfg")
+                        del models_cfg[role]["class"]
+                        structure.append(model_structure)
+                        parameters.append(self._process_cfg(models_cfg[role]))
+                    model_class = self._component("Shared")
+                    # print model source
+                    source = model_class(
+                        observation_space=observation_spaces[agent_id],
+                        action_space=action_spaces[agent_id],
+                        device=device,
+                        structure=structure,
+                        roles=roles,
+                        parameters=parameters,
+                        return_source=True,
                     )
-                # get shared model structure and parameters
-                structure = []
-                parameters = []
-                for role in roles:
-                    # get instantiator function and remove 'class' key
-                    model_structure = models_cfg[role].get("class")
-                    if not model_structure:
-                        raise ValueError(f"No 'class' field defined in 'models:{role}' cfg")
-                    del models_cfg[role]["class"]
-                    structure.append(model_structure)
-                    parameters.append(self._process_cfg(models_cfg[role]))
-                model_class = self._component("Shared")
-                # print model source
-                source = model_class(
-                    observation_space=observation_spaces[agent_id],
-                    action_space=action_spaces[agent_id],
-                    device=device,
-                    structure=structure,
-                    roles=roles,
-                    parameters=parameters,
-                    return_source=True,
-                )
-                print("==================================================")
-                print(f"Shared model (roles): {roles}")
-                print("==================================================\n")
-                print(source)
-                print("--------------------------------------------------")
-                # instantiate model
-                models[agent_id][roles[0]] = model_class(
-                    observation_space=observation_spaces[agent_id],
-                    action_space=action_spaces[agent_id],
-                    device=device,
-                    structure=structure,
-                    roles=roles,
-                    parameters=parameters,
-                )
-                models[agent_id][roles[1]] = models[agent_id][roles[0]]
+                    print("==================================================")
+                    print(f"Shared model (roles): {roles}")
+                    print("==================================================\n")
+                    print(source)
+                    print("--------------------------------------------------")
+                    # instantiate model
+                    models[agent_id][roles[0]] = model_class(
+                        observation_space=observation_spaces[agent_id],
+                        action_space=action_spaces[agent_id],
+                        device=device,
+                        structure=structure,
+                        roles=roles,
+                        parameters=parameters,
+                    )
+                    models[agent_id][roles[1]] = models[agent_id][roles[0]]
 
         # initialize lazy modules' parameters
         for agent_id in possible_agents:
