@@ -127,9 +127,117 @@
 
 #     }
 # }
-# # [end-config-dict-torch]
-# # fmt: on
 
+MAAMP_DEFAULT_CONFIG = {
+
+  "PPO" :{
+    "rollouts": 16,                 # number of rollouts before updating
+    "learning_epochs": 8,           # number of learning epochs during each update
+    "mini_batches": 2,              # number of mini batches during each learning epoch
+
+    "discount_factor": 0.99,        # discount factor (gamma)
+    "lambda": 0.95,                 # TD(lambda) coefficient (lam) for computing returns and advantages
+
+    "learning_rate": 1e-3,                  # learning rate
+    "learning_rate_scheduler": None,        # learning rate scheduler class (see torch.optim.lr_scheduler)
+    "learning_rate_scheduler_kwargs": {},   # learning rate scheduler's kwargs (e.g. {"step_size": 1e-3})
+
+    "state_preprocessor": None,             # state preprocessor class (see skrl.resources.preprocessors)
+    "state_preprocessor_kwargs": {},        # state preprocessor's kwargs (e.g. {"size": env.observation_space})
+    "value_preprocessor": None,             # value preprocessor class (see skrl.resources.preprocessors)
+    "value_preprocessor_kwargs": {},        # value preprocessor's kwargs (e.g. {"size": 1})
+
+    "random_timesteps": 0,          # random exploration steps
+    "learning_starts": 0,           # learning starts after this many steps
+
+    "grad_norm_clip": 0.5,              # clipping coefficient for the norm of the gradients
+    "ratio_clip": 0.2,                  # clipping coefficient for computing the clipped surrogate objective
+    "value_clip": 0.2,                  # clipping coefficient for computing the value loss (if clip_predicted_values is True)
+    "clip_predicted_values": False,     # clip predicted values during value loss computation
+
+    "entropy_loss_scale": 0.0,      # entropy loss scaling factor
+    "value_loss_scale": 1.0,        # value loss scaling factor
+
+    "kl_threshold": 0,              # KL divergence threshold for early stopping
+
+    "rewards_shaper": None,         # rewards shaping function: Callable(reward, timestep, timesteps) -> reward
+    "time_limit_bootstrap": False,  # bootstrap at timeout termination (episode truncation)
+
+    "mixed_precision": False,       # enable automatic mixed precision for higher performance
+
+    "experiment": {
+        "directory": "",            # experiment's parent directory
+        "experiment_name": "",      # experiment name
+        "write_interval": "auto",   # TensorBoard writing interval (timesteps)
+
+        "checkpoint_interval": "auto",      # interval for checkpoints (timesteps)
+        "store_separately": False,          # whether to store checkpoints separately
+
+        "wandb": False,             # whether to use Weights & Biases
+        "wandb_kwargs": {}          # wandb kwargs (see https://docs.wandb.ai/ref/python/init)
+    }
+    },
+
+
+   "AMP":{
+    "rollouts": 16,                 # number of rollouts before updating
+    "learning_epochs": 6,           # number of learning epochs during each update
+    "mini_batches": 2,              # number of mini batches during each learning epoch
+
+    "discount_factor": 0.99,        # discount factor (gamma)
+    "lambda": 0.95,                 # TD(lambda) coefficient (lam) for computing returns and advantages
+
+    "learning_rate": 5e-5,                  # learning rate
+    "learning_rate_scheduler": None,        # learning rate scheduler class (see torch.optim.lr_scheduler)
+    "learning_rate_scheduler_kwargs": {},   # learning rate scheduler's kwargs (e.g. {"step_size": 1e-3})
+
+    "state_preprocessor": None,             # state preprocessor class (see skrl.resources.preprocessors)
+    "state_preprocessor_kwargs": {},        # state preprocessor's kwargs (e.g. {"size": env.observation_space})
+    "value_preprocessor": None,             # value preprocessor class (see skrl.resources.preprocessors)
+    "value_preprocessor_kwargs": {},        # value preprocessor's kwargs (e.g. {"size": 1})
+    "amp_state_preprocessor": None,         # AMP state preprocessor class (see skrl.resources.preprocessors)
+    "amp_state_preprocessor_kwargs": {},    # AMP state preprocessor's kwargs (e.g. {"size": env.amp_observation_space})
+
+    "random_timesteps": 0,          # random exploration steps
+    "learning_starts": 0,           # learning starts after this many steps
+
+    "grad_norm_clip": 0.0,              # clipping coefficient for the norm of the gradients
+    "ratio_clip": 0.2,                  # clipping coefficient for computing the clipped surrogate objective
+    "value_clip": 0.2,                  # clipping coefficient for computing the value loss (if clip_predicted_values is True)
+    "clip_predicted_values": False,     # clip predicted values during value loss computation
+
+    "entropy_loss_scale": 0.0,          # entropy loss scaling factor
+    "value_loss_scale": 2.5,            # value loss scaling factor
+    "discriminator_loss_scale": 5.0,    # discriminator loss scaling factor
+
+    "amp_batch_size": 512,                  # batch size for updating the reference motion dataset
+    "task_reward_weight": 0.0,              # task-reward weight (wG)
+    "style_reward_weight": 1.0,             # style-reward weight (wS)
+    "discriminator_batch_size": 0,          # batch size for computing the discriminator loss (all samples if 0)
+    "discriminator_reward_scale": 2,                    # discriminator reward scaling factor
+    "discriminator_logit_regularization_scale": 0.05,   # logit regularization scale factor for the discriminator loss
+    "discriminator_gradient_penalty_scale": 5,          # gradient penalty scaling factor for the discriminator loss
+    "discriminator_weight_decay_scale": 0.0001,         # weight decay scaling factor for the discriminator loss
+
+    "rewards_shaper": None,         # rewards shaping function: Callable(reward, timestep, timesteps) -> reward
+    "time_limit_bootstrap": False,  # bootstrap at timeout termination (episode truncation)
+
+    "mixed_precision": False,       # enable automatic mixed precision for higher performance
+
+    "experiment": {
+        "directory": "",            # experiment's parent directory
+        "experiment_name": "",      # experiment name
+        "write_interval": "auto",   # TensorBoard writing interval (timesteps)
+
+        "checkpoint_interval": "auto",      # interval for checkpoints (timesteps)
+        "store_separately": False,          # whether to store checkpoints separately
+
+        "wandb": False,             # whether to use Weights & Biases
+        "wandb_kwargs": {}          # wandb kwargs (see https://docs.wandb.ai/ref/python/init)
+    }
+   }
+}
+# 
 
 # class AMP(Agent):
 #     def __init__(
