@@ -66,7 +66,7 @@ memory:
 # https://skrl.readthedocs.io/en/latest/api/multi_agents/ippo.html
 agent:
   humanoid:
-    class: MIPPO
+    class: MAAMP
     rollouts: 16
     learning_epochs: 8
     mini_batches: 1
@@ -100,7 +100,7 @@ agent:
 
 
   exo:
-    class: MIPPO
+    class: MAAMP
     rollouts: 8
     learning_epochs: 4
     mini_batches: 2

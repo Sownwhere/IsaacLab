@@ -41,7 +41,7 @@ parser.add_argument(
     "--algorithm",
     type=str,
     default="PPO",
-    choices=["AMP", "PPO", "IPPO", "MAPPO", "MIPPO"],
+    choices=["AMP", "PPO", "IPPO", "MAPPO", "MIPPO","MAAMP"],
     help="The RL algorithm used for training the skrl agent.",
 )
 
@@ -135,18 +135,31 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env_cfg.seed = agent_cfg["seed"]
 
     # specify directory for logging experiments
-    log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"]["experiment"]["directory"])
+    if "class" in agent_cfg["agent"]:
+        log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"]["experiment"]["directory"])
+    else:
+        agent_key = list(agent_cfg["agent"].keys())[0]  # 例如 "humanoid"
+        log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"][agent_key]["experiment"]["directory"])
+
+    
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Logging experiment in directory: {log_root_path}")
     # specify directory for logging runs: {time-stamp}_{run_name}
     log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_{algorithm}_{args_cli.ml_framework}"
     # The Ray Tune workflow extracts experiment name using the logging line below, hence, do not change it (see PR #2346, comment-2819298849)
     print(f"Exact experiment name requested from command line: {log_dir}")
-    if agent_cfg["agent"]["experiment"]["experiment_name"]:
-        log_dir += f'_{agent_cfg["agent"]["experiment"]["experiment_name"]}'
-    # set directory into agent config
-    agent_cfg["agent"]["experiment"]["directory"] = log_root_path
-    agent_cfg["agent"]["experiment"]["experiment_name"] = log_dir
+    if "class" in agent_cfg["agent"]:
+        if agent_cfg["agent"]["experiment"]["experiment_name"]:
+            log_dir += f'_{agent_cfg["agent"]["experiment"]["experiment_name"]}'
+        # set directory into agent config
+        agent_cfg["agent"]["experiment"]["directory"] = log_root_path
+        agent_cfg["agent"]["experiment"]["experiment_name"] = log_dir
+    else:
+        if agent_cfg["agent"][agent_key]["experiment"]["experiment_name"]:
+            log_dir += f'_{agent_cfg["agent"][agent_key]["experiment"]["experiment_name"]}'
+        # set directory into agent config
+        agent_cfg["agent"][agent_key]["experiment"]["directory"] = log_root_path
+        agent_cfg["agent"][agent_key]["experiment"]["experiment_name"] = log_dir
     # update log_dir
     log_dir = os.path.join(log_root_path, log_dir)
 

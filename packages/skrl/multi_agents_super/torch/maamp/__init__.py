@@ -1,1 +1,1 @@
-# from skrl.multi_agents.torch.maamp.maamp import MAAMP, MAAMP_DEFAULT_CONFIG
+from skrl.multi_agents_super.torch.maamp.maamp import MAAMP, MAAMP_DEFAULT_CONFIG

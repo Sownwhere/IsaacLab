@@ -83,5 +83,6 @@ gym.register(
         "skrl_ippo_cfg_entry_point": f"{agents.__name__}:skrl_ippo_cfg.yaml",
         "skrl_mappo_cfg_entry_point": f"{agents.__name__}:skrl_mappo_cfg.yaml",
         "skrl_mippo_cfg_entry_point":f"{agents.__name__}:skrl_mippo_cfg.yaml",
+        "skrl_maamp_cfg_entry_point":f"{agents.__name__}:skrl_maamp_cfg.yaml"
     },
 )

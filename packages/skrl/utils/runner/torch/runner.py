@@ -142,6 +142,9 @@ class Runner:
         elif name in ["mippo", "mippo_default_config"]:
             from skrl.multi_agents_super.torch.mippo import MIPPO, MIPPO_DEFAULT_CONFIG
             component = MIPPO_DEFAULT_CONFIG if "default_config" in name else MIPPO
+        elif name in ["maamp", "maamp_default_config"]:
+            from skrl.multi_agents_super.torch.maamp import MAAMP, MAAMP_DEFAULT_CONFIG
+            component = MAAMP_DEFAULT_CONFIG if "default_config" in name else MAAMP
 
         elif name in ["ippo", "ippo_default_config"]:
             from skrl.multi_agents.torch.ippo import IPPO, IPPO_DEFAULT_CONFIG
@@ -377,8 +380,8 @@ class Runner:
                 model.init_state_dict(role)
 
         return models
-
-    def _generate_agent(
+    
+    def _generate_agents(
         self,
         env: Union[Wrapper, MultiAgentEnvWrapper],
         cfg: Mapping[str, Any],
@@ -390,19 +393,35 @@ class Runner:
         :param cfg: A configuration dictionary
         :param models: Agent's model instances
 
-        :return: Agent instances
-        """
-        multi_agent = isinstance(env, MultiAgentEnvWrapper)
+        :return: Agent instances"""
+       
+        print("Generating agent instance...")
+        # multi_agent = isinstance(env, MultiAgentEnvWrapper)
         device = env.device
         num_envs = env.num_envs
-        possible_agents = env.possible_agents if multi_agent else ["agent"]
-        state_spaces = env.state_spaces if multi_agent else {"agent": env.state_space}
-        observation_spaces = env.observation_spaces if multi_agent else {"agent": env.observation_space}
-        action_spaces = env.action_spaces if multi_agent else {"agent": env.action_space}
+        possible_agents = env.possible_agents 
+        state_spaces = env.state_spaces 
+        observation_spaces = env.observation_spaces 
+        action_spaces = env.action_spaces
+
+        # agent_cfg_all 是 dict，不为空，并且它的所有 key 都出现在 possible_agents 中，则视为新格式
+        agent_cfg_all = cfg.get("agent", {})
+        print("agent_cfg_all:", agent_cfg_all)
+        agent_keys = set(agent_cfg_all.keys())
+
+        # 判断是否是新格式：所有 key 都是合法 agent_id
+        per_agent_cfg = agent_keys.issubset(set(possible_agents))
+
+
+        # # 判断 agent 配置是否为每个 agent 单独配置（新格式）
+        # per_agent_cfg = False
+        # agent_cfg_all = cfg.get("agent", {})
+        # if any(agent_id in agent_cfg_all for agent_id in possible_agents):
+        #     per_agent_cfg = True
+        
+        # agent_key = list(agent_cfg_all["agent"].keys())[0]
 
         agent_class = cfg.get("agent", {}).get("class", "").lower()
-        if not agent_class:
-            raise ValueError(f"No 'class' field defined in 'agent' cfg")
 
         # check for memory configuration (backward compatibility)
         if not "memory" in cfg:
@@ -418,129 +437,259 @@ class Runner:
             memory_class = self._component("RandomMemory")
             logger.warning("No 'class' field defined in 'memory' cfg. 'RandomMemory' will be used as default")
         memories = {}
-        # instantiate memory
+
+
+        # instantiate memory 
+        #
         if cfg["memory"]["memory_size"] < 0:
-            cfg["memory"]["memory_size"] = cfg["agent"]["rollouts"]  # memory_size is the agent's number of rollouts
+            cfg["memory"]["memory_size"] = cfg["agent"]["humanoid"]["rollouts"]  # memory_size is the agent's number of rollouts
         for agent_id in possible_agents:
             memories[agent_id] = memory_class(num_envs=num_envs, device=device, **self._process_cfg(cfg["memory"]))
 
-        # single-agent configuration and instantiation
-        if agent_class in ["amp"]:
-            agent_id = possible_agents[0]
-            try:
-                amp_observation_space = env.amp_observation_space
-            except Exception as e:
-                logger.warning(
-                    "Unable to get AMP space via 'env.amp_observation_space'. Using 'env.observation_space' instead"
-                )
-                amp_observation_space = observation_spaces[agent_id]
-            agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
-            agent_cfg.update(self._process_cfg(cfg["agent"]))
-            agent_cfg["state_preprocessor_kwargs"].update({"size": observation_spaces[agent_id], "device": device})
-            agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
-            agent_cfg["amp_state_preprocessor_kwargs"].update({"size": amp_observation_space, "device": device})
+        print("f"*100)
+        # # 获取所有智能体名称列表
+        agent_names = [name for name, config in agent_cfg_all.items() 
+                    if isinstance(config, dict) and "class" in config]
+        
 
-            motion_dataset = None
-            if cfg.get("motion_dataset"):
-                motion_dataset_class = cfg["motion_dataset"].get("class")
-                if not motion_dataset_class:
-                    raise ValueError(f"No 'class' field defined in 'motion_dataset' cfg")
-                del cfg["motion_dataset"]["class"]
-                motion_dataset = self._component(motion_dataset_class)(
-                    device=device, **self._process_cfg(cfg.get("motion_dataset", {}))
+        for agent_name in agent_names:
+            agent_class = agent_cfg_all[agent_name]["class"].lower()
+            print(agent_class)
+            if agent_class in ["maamp"]:
+                print("here"*10)
+                agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+                print(cfg["agent"][agent_name])
+                agent_cfg.update(self._process_cfg(cfg["agent"][agent_name]))
+                print("here"*10)
+                agent_cfg["state_preprocessor_kwargs"].update(
+                    {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
                 )
-            reply_buffer = None
-            if cfg.get("reply_buffer"):
-                reply_buffer_class = cfg["reply_buffer"].get("class")
-                if not reply_buffer_class:
-                    raise ValueError(f"No 'class' field defined in 'reply_buffer' cfg")
-                del cfg["reply_buffer"]["class"]
-                reply_buffer = self._component(reply_buffer_class)(
-                    device=device, **self._process_cfg(cfg.get("reply_buffer", {}))
-                )
+                print("qqqq"*10)
+                agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+                agent_kwargs = {
+                    "models": models,
+                    "memories": memories,
+                    "observation_spaces": observation_spaces,
+                    "action_spaces": action_spaces,
+                    "possible_agents": possible_agents,
+                }
+            
 
-            agent_kwargs = {
-                "models": models[agent_id],
-                "memory": memories[agent_id],
-                "observation_space": observation_spaces[agent_id],
-                "action_space": action_spaces[agent_id],
-                "amp_observation_space": amp_observation_space,
-                "motion_dataset": motion_dataset,
-                "reply_buffer": reply_buffer,
-                "collect_reference_motions": lambda num_samples: env.collect_reference_motions(num_samples),
-            }
-        elif agent_class in ["a2c", "cem", "ddpg", "ddqn", "dqn", "ppo", "rpo", "sac", "td3", "trpo"]:
-            agent_id = possible_agents[0]
-            agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
-            agent_cfg.update(self._process_cfg(cfg["agent"]))
-            agent_cfg.get("state_preprocessor_kwargs", {}).update(
-                {"size": observation_spaces[agent_id], "device": device}
-            )
-            agent_cfg.get("value_preprocessor_kwargs", {}).update({"size": 1, "device": device})
-            if agent_cfg.get("exploration", {}).get("noise", None):
-                agent_cfg["exploration"].get("noise_kwargs", {}).update({"device": device})
-                agent_cfg["exploration"]["noise"] = agent_cfg["exploration"]["noise"](
-                    **agent_cfg["exploration"].get("noise_kwargs", {})
-                )
-            if agent_cfg.get("smooth_regularization_noise", None):
-                agent_cfg.get("smooth_regularization_noise_kwargs", {}).update({"device": device})
-                agent_cfg["smooth_regularization_noise"] = agent_cfg["smooth_regularization_noise"](
-                    **agent_cfg.get("smooth_regularization_noise_kwargs", {})
-                )
-            agent_kwargs = {
-                "models": models[agent_id],
-                "memory": memories[agent_id],
-                "observation_space": observation_spaces[agent_id],
-                "action_space": action_spaces[agent_id],
-            }
+        
+        # # 遍历智能体名称
+        # for agent_name in agent_names:
+        #     config = agent_cfg_all[agent_name]
+        #     print(f"{agent_name} 使用 {config['class']} 算法")
+
         # multi-agent configuration and instantiation
-        elif agent_class in ["ippo"]:
-            agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
-            agent_cfg.update(self._process_cfg(cfg["agent"]))
-            agent_cfg["state_preprocessor_kwargs"].update(
-                {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
-            )
-            agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
-            agent_kwargs = {
-                "models": models,
-                "memories": memories,
-                "observation_spaces": observation_spaces,
-                "action_spaces": action_spaces,
-                "possible_agents": possible_agents,
-            }
-        #bw
-        elif agent_class in ["mippo"]:
-            agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
-            agent_cfg.update(self._process_cfg(cfg["agent"]))
-            agent_cfg["state_preprocessor_kwargs"].update(
-                {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
-            )
-            agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
-            agent_kwargs = {
-                "models": models,
-                "memories": memories,
-                "observation_spaces": observation_spaces,
-                "action_spaces": action_spaces,
-                "possible_agents": possible_agents,
-            }
-        elif agent_class in ["mappo"]:
-            agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
-            agent_cfg.update(self._process_cfg(cfg["agent"]))
-            agent_cfg["state_preprocessor_kwargs"].update(
-                {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
-            )
-            agent_cfg["shared_state_preprocessor_kwargs"].update(
-                {agent_id: {"size": state_spaces[agent_id], "device": device} for agent_id in possible_agents}
-            )
-            agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
-            agent_kwargs = {
-                "models": models,
-                "memories": memories,
-                "observation_spaces": observation_spaces,
-                "action_spaces": action_spaces,
-                "shared_observation_spaces": state_spaces,
-                "possible_agents": possible_agents,
-            }
+        # if agent_class in ["ippo"]:
+        #     agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+        #     agent_cfg.update(self._process_cfg(cfg["agent"]))
+        #     agent_cfg["state_preprocessor_kwargs"].update(
+        #         {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
+        #     )
+        #     agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+        #     agent_kwargs = {
+        #         "models": models,
+        #         "memories": memories,
+        #         "observation_spaces": observation_spaces,
+        #         "action_spaces": action_spaces,
+        #         "possible_agents": possible_agents,
+        #     }
+        # #bw
+        # elif agent_class in ["maamp"]:
+
+        #     agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+        #     if per_agent_cfg:
+        #         # 为每个 agent 提取独立 config 并合并到总 config 中（可选）
+        #         for aid in possible_agents:
+        #             individual_cfg = self._process_cfg(agent_cfg_all.get(aid, {}))
+        #             agent_cfg.update({k: v for k, v in individual_cfg.items() if v is not None})
+        #     else:
+        #         agent_cfg.update(self._process_cfg(agent_cfg_all))
+                
+        #     # 按 agent 填充预处理器参数
+        #     agent_cfg["state_preprocessor_kwargs"].update(
+        #         {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
+        #     )
+        #     agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+
+        #     agent_kwargs = {
+        #         "models": models,
+        #         "memories": memories,
+        #         "observation_spaces": observation_spaces,
+        #         "action_spaces": action_spaces,
+        #         "possible_agents": possible_agents,
+        #     }
+        return self._component(agent_class)(cfg=agent_cfg, device=device, **agent_kwargs)
+
+    def _generate_agent(
+        self,
+        env: Union[Wrapper, MultiAgentEnvWrapper],
+        cfg: Mapping[str, Any],
+        models: Mapping[str, Mapping[str, Model]],
+    ) -> Agent:
+        """Generate agent instance according to the environment specification and the given config and models
+
+        :param env: Wrapped environment
+        :param cfg: A configuration dictionary
+        :param models: Agent's model instances
+
+        :return: Agent instances
+        """
+        print("Generating agent instance...",cfg["agent"])
+        if "class" not in cfg["agent"]:
+            self._generate_agents(self._env, copy.deepcopy(self._cfg), self._models)
+        else:
+            multi_agent = isinstance(env, MultiAgentEnvWrapper)
+            device = env.device
+            num_envs = env.num_envs
+            possible_agents = env.possible_agents if multi_agent else ["agent"]
+            state_spaces = env.state_spaces if multi_agent else {"agent": env.state_space}
+            observation_spaces = env.observation_spaces if multi_agent else {"agent": env.observation_space}
+            action_spaces = env.action_spaces if multi_agent else {"agent": env.action_space}
+
+            agent_class = cfg.get("agent", {}).get("class", "").lower()
+            if not agent_class:
+                raise ValueError(f"No 'class' field defined in 'agent' cfg")
+
+            # check for memory configuration (backward compatibility)
+            if not "memory" in cfg:
+                logger.warning(
+                    "Deprecation warning: No 'memory' field defined in cfg. Using the default generated configuration"
+                )
+                cfg["memory"] = {"class": "RandomMemory", "memory_size": -1}
+            # get memory class and remove 'class' field
+            try:
+                memory_class = self._component(cfg["memory"]["class"])
+                del cfg["memory"]["class"]
+            except KeyError:
+                memory_class = self._component("RandomMemory")
+                logger.warning("No 'class' field defined in 'memory' cfg. 'RandomMemory' will be used as default")
+            memories = {}
+            # instantiate memory
+            if cfg["memory"]["memory_size"] < 0:
+                cfg["memory"]["memory_size"] = cfg["agent"]["rollouts"]  # memory_size is the agent's number of rollouts
+            for agent_id in possible_agents:
+                memories[agent_id] = memory_class(num_envs=num_envs, device=device, **self._process_cfg(cfg["memory"]))
+
+            # single-agent configuration and instantiation
+            if agent_class in ["amp"]:
+                agent_id = possible_agents[0]
+                try:
+                    amp_observation_space = env.amp_observation_space
+                except Exception as e:
+                    logger.warning(
+                        "Unable to get AMP space via 'env.amp_observation_space'. Using 'env.observation_space' instead"
+                    )
+                    amp_observation_space = observation_spaces[agent_id]
+                agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+                agent_cfg.update(self._process_cfg(cfg["agent"]))
+                agent_cfg["state_preprocessor_kwargs"].update({"size": observation_spaces[agent_id], "device": device})
+                agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+                agent_cfg["amp_state_preprocessor_kwargs"].update({"size": amp_observation_space, "device": device})
+
+                motion_dataset = None
+                if cfg.get("motion_dataset"):
+                    motion_dataset_class = cfg["motion_dataset"].get("class")
+                    if not motion_dataset_class:
+                        raise ValueError(f"No 'class' field defined in 'motion_dataset' cfg")
+                    del cfg["motion_dataset"]["class"]
+                    motion_dataset = self._component(motion_dataset_class)(
+                        device=device, **self._process_cfg(cfg.get("motion_dataset", {}))
+                    )
+                reply_buffer = None
+                if cfg.get("reply_buffer"):
+                    reply_buffer_class = cfg["reply_buffer"].get("class")
+                    if not reply_buffer_class:
+                        raise ValueError(f"No 'class' field defined in 'reply_buffer' cfg")
+                    del cfg["reply_buffer"]["class"]
+                    reply_buffer = self._component(reply_buffer_class)(
+                        device=device, **self._process_cfg(cfg.get("reply_buffer", {}))
+                    )
+
+                agent_kwargs = {
+                    "models": models[agent_id],
+                    "memory": memories[agent_id],
+                    "observation_space": observation_spaces[agent_id],
+                    "action_space": action_spaces[agent_id],
+                    "amp_observation_space": amp_observation_space,
+                    "motion_dataset": motion_dataset,
+                    "reply_buffer": reply_buffer,
+                    "collect_reference_motions": lambda num_samples: env.collect_reference_motions(num_samples),
+                }
+            elif agent_class in ["a2c", "cem", "ddpg", "ddqn", "dqn", "ppo", "rpo", "sac", "td3", "trpo"]:
+                agent_id = possible_agents[0]
+                agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+                agent_cfg.update(self._process_cfg(cfg["agent"]))
+                agent_cfg.get("state_preprocessor_kwargs", {}).update(
+                    {"size": observation_spaces[agent_id], "device": device}
+                )
+                agent_cfg.get("value_preprocessor_kwargs", {}).update({"size": 1, "device": device})
+                if agent_cfg.get("exploration", {}).get("noise", None):
+                    agent_cfg["exploration"].get("noise_kwargs", {}).update({"device": device})
+                    agent_cfg["exploration"]["noise"] = agent_cfg["exploration"]["noise"](
+                        **agent_cfg["exploration"].get("noise_kwargs", {})
+                    )
+                if agent_cfg.get("smooth_regularization_noise", None):
+                    agent_cfg.get("smooth_regularization_noise_kwargs", {}).update({"device": device})
+                    agent_cfg["smooth_regularization_noise"] = agent_cfg["smooth_regularization_noise"](
+                        **agent_cfg.get("smooth_regularization_noise_kwargs", {})
+                    )
+                agent_kwargs = {
+                    "models": models[agent_id],
+                    "memory": memories[agent_id],
+                    "observation_space": observation_spaces[agent_id],
+                    "action_space": action_spaces[agent_id],
+                }
+            # multi-agent configuration and instantiation
+            elif agent_class in ["ippo"]:
+                agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+                agent_cfg.update(self._process_cfg(cfg["agent"]))
+                agent_cfg["state_preprocessor_kwargs"].update(
+                    {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
+                )
+                agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+                agent_kwargs = {
+                    "models": models,
+                    "memories": memories,
+                    "observation_spaces": observation_spaces,
+                    "action_spaces": action_spaces,
+                    "possible_agents": possible_agents,
+                }
+            #bw
+            elif agent_class in ["mippo"]:
+                agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+                agent_cfg.update(self._process_cfg(cfg["agent"]))
+                agent_cfg["state_preprocessor_kwargs"].update(
+                    {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
+                )
+                agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+                agent_kwargs = {
+                    "models": models,
+                    "memories": memories,
+                    "observation_spaces": observation_spaces,
+                    "action_spaces": action_spaces,
+                    "possible_agents": possible_agents,
+                }
+            elif agent_class in ["mappo"]:
+                agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+                agent_cfg.update(self._process_cfg(cfg["agent"]))
+                agent_cfg["state_preprocessor_kwargs"].update(
+                    {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
+                )
+                agent_cfg["shared_state_preprocessor_kwargs"].update(
+                    {agent_id: {"size": state_spaces[agent_id], "device": device} for agent_id in possible_agents}
+                )
+                agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+                agent_kwargs = {
+                    "models": models,
+                    "memories": memories,
+                    "observation_spaces": observation_spaces,
+                    "action_spaces": action_spaces,
+                    "shared_observation_spaces": state_spaces,
+                    "possible_agents": possible_agents,
+                }
         return self._component(agent_class)(cfg=agent_cfg, device=device, **agent_kwargs)
 
     def _generate_trainer(
