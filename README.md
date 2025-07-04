@@ -132,3 +132,22 @@ Isaac Lab development initiated from the [Orbit](https://isaac-orbit.github.io/)
    doi={10.1109/LRA.2023.3270034}
 }
 ```
+
+gdp@gdp:~/IsaacLab$ conda activate env_isaaclab
+
+
+(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Bw
+
+
+(env_isaaclab) gdp@gdp:~/IsaacLab$ tensorboard --logdir=/home/gdp/IsaacLab/logs/skrl/bw_amp_walk/2025-07-01_09-46-49_ppo_torch --port=6006
+
+
+(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Isaac-Cart-Double-Pendulum-Direct-v0  --algorithm IPPO
+
+--algorithm MAPPO
+--algorithm MAAMP
+
+
+--task  hexo
+
+(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task  hexo  --algorithm IPPO
