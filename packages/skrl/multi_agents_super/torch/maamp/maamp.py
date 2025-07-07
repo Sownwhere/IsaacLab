@@ -1,4 +1,4 @@
-from typing import Any, Callable, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Mapping, Optional, Tuple, Union,Sequence
 
 import copy
 import itertools
@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from skrl import config, logger
-from skrl.agents.torch import Agent
+from skrl.multi_agents_super.torch import MultiAgentSuper
 from skrl.memories.torch import Memory
 from skrl.models.torch import Model
 from skrl.resources.schedulers.torch import KLAdaptiveLR
@@ -127,20 +127,25 @@ MAAMP_DEFAULT_CONFIG = {
 }
 # 
 
-class MAAMP(Agent):
+class MAAMP(MultiAgentSuper):
     def __init__(
         self,
+        possible_agents: Sequence[str],
         models: Mapping[str, Model],
-        memory: Optional[Union[Memory, Tuple[Memory]]] = None,
-        observation_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
-        action_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
+        memories: Optional[Mapping[str, Memory]] = None,
+        observation_spaces: Optional[Union[Mapping[str, int], Mapping[str, gymnasium.Space]]] = None,
+        action_spaces: Optional[Union[Mapping[str, int], Mapping[str, gymnasium.Space]]] = None,
         device: Optional[Union[str, torch.device]] = None,
         cfg: Optional[dict] = None,
-        amp_observation_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
-        motion_dataset: Optional[Memory] = None,
-        reply_buffer: Optional[Memory] = None,
-        collect_reference_motions: Optional[Callable[[int], torch.Tensor]] = None,
-        collect_observation: Optional[Callable[[], torch.Tensor]] = None,
+       
+        # memory: Optional[Union[Memory, Tuple[Memory]]] = None,
+        # observation_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
+        # action_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
+        # amp_observation_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
+        # motion_dataset: Optional[Memory] = None,
+        # reply_buffer: Optional[Memory] = None,
+        # collect_reference_motions: Optional[Callable[[int], torch.Tensor]] = None,
+        # collect_observation: Optional[Callable[[], torch.Tensor]] = None,
     ) -> None:
         # 解析模式：PPO / AMP
         print("hello")
@@ -150,13 +155,105 @@ class MAAMP(Agent):
         _cfg = copy.deepcopy(MAAMP_DEFAULT_CONFIG)
         _cfg.update(cfg if cfg is not None else {})
         super().__init__(
+            possible_agents=possible_agents,
             models=models,
-            memory=memory,
-            observation_space=observation_space,
-            action_space=action_space,
+            memories=memories,
+            observation_spaces=observation_spaces,
+            action_spaces=action_spaces,
             device=device,
             cfg=_cfg,
         )
+
+        # models
+        self.policies = {uid: self.models[uid].get("policy", None) for uid in self.possible_agents}
+        print(self.policies)
+        self.values = {uid: self.models[uid].get("value", None) for uid in self.possible_agents}
+        print(self.values)
+
+
+        for uid in self.possible_agents:
+            # checkpoint models
+            self.checkpoint_modules[uid]["policy"] = self.policies[uid]
+            self.checkpoint_modules[uid]["value"] = self.values[uid]
+
+            # broadcast models' parameters in distributed runs
+            if config.torch.is_distributed:
+                logger.info(f"Broadcasting models' parameters")
+                if self.policies[uid] is not None:
+                    self.policies[uid].broadcast_parameters()
+                    if self.values[uid] is not None and self.policies[uid] is not self.values[uid]:
+                        self.values[uid].broadcast_parameters()
+
+        # configuration
+        print("Configuration:")
+        print(self.cfg)
+        print(self.cfg["PPO"]["learning_epochs"])
+        self._ppo_learning_epochs = self.cfg["PPO"]["learning_epochs"]
+        self._ppo_mini_batches = self.cfg["PPO"]["mini_batches"]
+        self._ppo_rollouts = self.cfg["PPO"]["rollouts"]
+        self._ppo_rollout = 0
+
+        self._ppo_grad_norm_clip = self.cfg["PPO"]["grad_norm_clip"]
+        self._ppo_ratio_clip = self.cfg["PPO"]["ratio_clip"]
+        self._ppo_value_clip = self.cfg["PPO"]["value_clip"]
+        self._ppo_clip_predicted_values = self.cfg["PPO"]["clip_predicted_values"]
+
+        self._ppo_value_loss_scale = self.cfg["PPO"]["value_loss_scale"]
+        self._ppo_entropy_loss_scale = self.cfg["PPO"]["entropy_loss_scale"]
+
+        self._ppo_kl_threshold = self.cfg["PPO"]["kl_threshold"]
+
+        self._ppo_learning_rate = self.cfg["PPO"]["learning_rate"]
+        self._ppo_learning_rate_scheduler = self.cfg["PPO"]["learning_rate_scheduler"]
+        self._ppo_learning_rate_scheduler_kwargs = self.cfg["PPO"]["learning_rate_scheduler_kwargs"]
+
+        self._ppo_state_preprocessor = self.cfg["PPO"]["state_preprocessor"]
+        self._ppo_state_preprocessor_kwargs = self.cfg["PPO"]["state_preprocessor_kwargs"]
+        self._ppo_value_preprocessor = self.cfg["PPO"]["value_preprocessor"]
+        self._ppo_value_preprocessor_kwargs = self.cfg["PPO"]["value_preprocessor_kwargs"]
+
+        self._ppo_discount_factor = self.cfg["PPO"]["discount_factor"]
+        self._ppo_lambda = self.cfg["PPO"]["lambda"]
+
+        self._ppo_random_timesteps = self.cfg["PPO"]["random_timesteps"]
+        self._ppo_learning_starts = self.cfg["PPO"]["learning_starts"]
+
+        self._ppo_rewards_shaper = self.cfg["PPO"]["rewards_shaper"]
+        self._ppo_time_limit_bootstrap = self.cfg["PPO"]["time_limit_bootstrap"]
+
+        self._ppo_mixed_precision = self.cfg["PPO"]["mixed_precision"]
+        print("feeeeeeeee")
+
+
+        # set up automatic mixed precision
+        self._device_type = torch.device(device).type
+        if version.parse(torch.__version__) >= version.parse("2.4"):
+            self.scaler = torch.amp.GradScaler(device=self._device_type, enabled=self._ppo_mixed_precision)
+        else:
+            self.scaler = torch.cuda.amp.GradScaler(enabled=self._ppo_mixed_precision)
+
+        # set up optimizer and learning rate scheduler
+        self.optimizers = {}
+        self.schedulers = {}
+
+        print("Setting up optimizers and learning rate schedulers...")
+        for uid in self.possible_agents:
+            policy = self.policies[uid]
+            value = self.values[uid]
+            if policy is not None and value is not None:
+                if policy is value:
+                    optimizer = torch.optim.Adam(policy.parameters(), lr=self._ppo_learning_rate[uid])
+                else:
+                    print(self._ppo_learning_rate[uid])
+                    optimizer = torch.optim.Adam(
+                        itertools.chain(policy.parameters(), value.parameters()), lr=self._ppo_learning_rate[uid]
+                    )
+                self.optimizers[uid] = optimizer
+                if self._ppo_learning_rate_scheduler[uid] is not None:
+                    self.schedulers[uid] = self._ppo_learning_rate_scheduler[uid](
+                        optimizer, **self._ppo_learning_rate_scheduler_kwargs[uid]
+                    )
+
 
 #         self.amp_observation_space = amp_observation_space
 #         self.motion_dataset = motion_dataset
