@@ -31,29 +31,38 @@ models:
       output: ONE
 
   humanoid:
-    policy:
+    policy:  # see gaussian_model parameters
       class: GaussianMixin
-      clip_actions: True
+      clip_actions: False
       clip_log_std: True
-      min_log_std: -10.0
-      max_log_std: 1.0
-      initial_log_std: -1.0
+      min_log_std: -20.0
+      max_log_std: 2.0
+      initial_log_std: -2.9
+      fixed_log_std: True
       network:
         - name: net
           input: STATES
-          layers: [64, 64]
+          layers: [1024, 512]
           activations: relu
       output: ACTIONS
-    value:
+    value:  # see deterministic_model parameters
       class: DeterministicMixin
       clip_actions: False
       network:
         - name: net
           input: STATES
-          layers: [64, 64]
+          layers: [1024, 512]
           activations: relu
       output: ONE
-
+    discriminator:  # see deterministic_model parameters
+      class: DeterministicMixin
+      clip_actions: False
+      network:
+        - name: net
+          input: STATES
+          layers: [1024, 512]
+          activations: relu
+      output: ONE
 
 # Rollout memory
 # https://skrl.readthedocs.io/en/latest/api/memories/random.html
