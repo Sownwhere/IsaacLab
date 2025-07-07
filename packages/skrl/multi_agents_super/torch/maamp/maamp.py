@@ -187,7 +187,6 @@ class MAAMP(MultiAgentSuper):
         # configuration
         print("Configuration:")
         print(self.cfg)
-        print(self.cfg["PPO"]["learning_epochs"])
         self._ppo_learning_epochs = self.cfg["PPO"]["learning_epochs"]
         self._ppo_mini_batches = self.cfg["PPO"]["mini_batches"]
         self._ppo_rollouts = self.cfg["PPO"]["rollouts"]
@@ -222,7 +221,51 @@ class MAAMP(MultiAgentSuper):
         self._ppo_time_limit_bootstrap = self.cfg["PPO"]["time_limit_bootstrap"]
 
         self._ppo_mixed_precision = self.cfg["PPO"]["mixed_precision"]
-        print("feeeeeeeee")
+
+        ### amp configuration
+        self._amp_learning_epochs = self.cfg["AMP"]["learning_epochs"]
+        self._amp_mini_batches = self.cfg["AMP"]["mini_batches"]
+        self._amp_rollouts = self.cfg["AMP"]["rollouts"]
+        self._amp_rollout = 0
+
+        self._amp_grad_norm_clip = self.cfg["AMP"]["grad_norm_clip"]
+        self._amp_ratio_clip = self.cfg["AMP"]["ratio_clip"]
+        self._amp_value_clip = self.cfg["AMP"]["value_clip"]
+        self._amp_clip_predicted_values = self.cfg["AMP"]["clip_predicted_values"]
+
+        self._amp_value_loss_scale = self.cfg["AMP"]["value_loss_scale"]
+        self._amp_entropy_loss_scale = self.cfg["AMP"]["entropy_loss_scale"]
+        self._amp_discriminator_loss_scale = self.cfg["AMP"]["discriminator_loss_scale"]
+
+        self._amp_learning_rate = self.cfg["AMP"]["learning_rate"]
+        self._amp_learning_rate_scheduler = self.cfg["AMP"]["learning_rate_scheduler"]
+
+        self._amp_state_preprocessor = self.cfg["AMP"]["state_preprocessor"]
+        self._amp_value_preprocessor = self.cfg["AMP"]["value_preprocessor"]
+        self._amp_amp_state_preprocessor = self.cfg["AMP"]["amp_state_preprocessor"]
+
+        self._amp_discount_factor = self.cfg["AMP"]["discount_factor"]
+        self._amp_lambda = self.cfg["AMP"]["lambda"]
+
+        self._amp_random_timesteps = self.cfg["AMP"]["random_timesteps"]
+        self._amp_learning_starts = self.cfg["AMP"]["learning_starts"]
+
+        self._amp_amp_batch_size = self.cfg["AMP"]["amp_batch_size"]
+        self._amp_task_reward_weight = self.cfg["AMP"]["task_reward_weight"]
+        self._amp_style_reward_weight = self.cfg["AMP"]["style_reward_weight"]
+
+        self._amp_discriminator_batch_size = self.cfg["AMP"]["discriminator_batch_size"]
+        self._amp_discriminator_reward_scale = self.cfg["AMP"]["discriminator_reward_scale"]
+        self._amp_discriminator_logit_regularization_scale = self.cfg["AMP"]["discriminator_logit_regularization_scale"]
+        self._amp_discriminator_gradient_penalty_scale = self.cfg["AMP"]["discriminator_gradient_penalty_scale"]
+        self._amp_discriminator_weight_decay_scale = self.cfg["AMP"]["discriminator_weight_decay_scale"]
+
+        self._amp_rewards_shaper = self.cfg["AMP"]["rewards_shaper"]
+        self._amp_time_limit_bootstrap = self.cfg["AMP"]["time_limit_bootstrap"]
+
+        self._amp_mixed_precision = self.cfg["AMP"]["mixed_precision"]
+
+        print(f"AMP: {self.cfg['AMP']}")
 
 
         # set up automatic mixed precision
