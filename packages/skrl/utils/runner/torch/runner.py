@@ -140,13 +140,16 @@ class Runner:
         #     component = MAAMP_DEFAULT_CONFIG if "default_config" in name else MAAMP
 
         elif name in ["mippo", "mippo_default_config"]:
+            print("mippo")
             from skrl.multi_agents_super.torch.mippo import MIPPO, MIPPO_DEFAULT_CONFIG
             component = MIPPO_DEFAULT_CONFIG if "default_config" in name else MIPPO
         elif name in ["maamp", "maamp_default_config"]:
+            print("Using MAAMP")
             from skrl.multi_agents_super.torch.maamp import MAAMP, MAAMP_DEFAULT_CONFIG
             component = MAAMP_DEFAULT_CONFIG if "default_config" in name else MAAMP
 
         elif name in ["ippo", "ippo_default_config"]:
+            print("Using IPPO")
             from skrl.multi_agents.torch.ippo import IPPO, IPPO_DEFAULT_CONFIG
 
             component = IPPO_DEFAULT_CONFIG if "default_config" in name else IPPO
@@ -395,7 +398,6 @@ class Runner:
 
         :return: Agent instances"""
        
-        print("Generating agent instance...")
         # multi_agent = isinstance(env, MultiAgentEnvWrapper)
         device = env.device
         num_envs = env.num_envs
@@ -406,7 +408,6 @@ class Runner:
 
         # agent_cfg_all 是 dict，不为空，并且它的所有 key 都出现在 possible_agents 中，则视为新格式
         agent_cfg_all = cfg.get("agent", {})
-        print("agent_cfg_all:", agent_cfg_all)
         agent_keys = set(agent_cfg_all.keys())
 
         # 判断是否是新格式：所有 key 都是合法 agent_id
@@ -421,7 +422,7 @@ class Runner:
         
         # agent_key = list(agent_cfg_all["agent"].keys())[0]
 
-        agent_class = cfg.get("agent", {}).get("class", "").lower()
+        agent_class = "maamp"
 
         # check for memory configuration (backward compatibility)
         if not "memory" in cfg:
@@ -442,39 +443,55 @@ class Runner:
         # instantiate memory 
         #
         if cfg["memory"]["memory_size"] < 0:
-            cfg["memory"]["memory_size"] = cfg["agent"]["humanoid"]["rollouts"]  # memory_size is the agent's number of rollouts
+            cfg["memory"]["memory_size"] = cfg["agent"]["PPO"]["rollouts"]  # memory_size is the agent's number of rollouts
         for agent_id in possible_agents:
             memories[agent_id] = memory_class(num_envs=num_envs, device=device, **self._process_cfg(cfg["memory"]))
 
-        print("f"*100)
+
         # # 获取所有智能体名称列表
         agent_names = [name for name, config in agent_cfg_all.items() 
                     if isinstance(config, dict) and "class" in config]
         
+        agent_cfg = self._component(f"MAAMP_DEFAULT_CONFIG").copy()
 
+        agent_cfg.update(self._process_cfg(agent_cfg_all))
+        print(agent_cfg)
         for agent_name in agent_names:
-            agent_class = agent_cfg_all[agent_name]["class"].lower()
-            print(agent_class)
-            if agent_class in ["maamp"]:
-                print("here"*10)
-                agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
-                print(cfg["agent"][agent_name])
-                agent_cfg.update(self._process_cfg(cfg["agent"][agent_name]))
-                print("here"*10)
-                agent_cfg["state_preprocessor_kwargs"].update(
-                    {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
-                )
-                print("qqqq"*10)
-                agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
-                agent_kwargs = {
-                    "models": models,
-                    "memories": memories,
-                    "observation_spaces": observation_spaces,
-                    "action_spaces": action_spaces,
-                    "possible_agents": possible_agents,
-                }
-            
+            agent_cfg[agent_name]["state_preprocessor_kwargs"].update(
+                {agent_id: {"size": observation_spaces[agent_id], "device": device}})
+            agent_cfg[agent_name]["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+        agent_kwargs = {
+            "models": models,
+            "memories": memories,
+            "observation_spaces": observation_spaces,
+            "action_spaces": action_spaces,
+            "possible_agents": possible_agents,
+        }
 
+        
+        # for agent_name in agent_names:
+        #     print(agent_name)
+        #     agent_class = agent_cfg_all[agent_name]["class"].lower()
+        #     print(agent_class)
+        #     if agent_class in ["maamp"]:
+        #         print("here"*10)
+        #         agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+        #         print(cfg["agent"][agent_name])
+        #         agent_cfg.update(self._process_cfg(cfg["agent"][agent_name]))
+        #         print("here"*10)
+        #         agent_cfg["state_preprocessor_kwargs"].update(
+        #             {agent_id: {"size": observation_spaces[agent_id], "device": device} for agent_id in possible_agents}
+        #         )
+        #         print("qqqq"*10)
+        #         agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+        #         agent_kwargs = {
+        #             "models": models,
+        #             "memories": memories,
+        #             "observation_spaces": observation_spaces,
+        #             "action_spaces": action_spaces,
+        #             "possible_agents": possible_agents,
+        #         }
+            
         
         # # 遍历智能体名称
         # for agent_name in agent_names:
@@ -499,14 +516,14 @@ class Runner:
         # #bw
         # elif agent_class in ["maamp"]:
 
-        #     agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
-        #     if per_agent_cfg:
-        #         # 为每个 agent 提取独立 config 并合并到总 config 中（可选）
-        #         for aid in possible_agents:
-        #             individual_cfg = self._process_cfg(agent_cfg_all.get(aid, {}))
-        #             agent_cfg.update({k: v for k, v in individual_cfg.items() if v is not None})
-        #     else:
-        #         agent_cfg.update(self._process_cfg(agent_cfg_all))
+            # agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+            # if per_agent_cfg:
+            #     # 为每个 agent 提取独立 config 并合并到总 config 中（可选）
+            #     for aid in possible_agents:
+            #         individual_cfg = self._process_cfg(agent_cfg_all.get(aid, {}))
+            #         agent_cfg.update({k: v for k, v in individual_cfg.items() if v is not None})
+            # else:
+            #     agent_cfg.update(self._process_cfg(agent_cfg_all))
                 
         #     # 按 agent 填充预处理器参数
         #     agent_cfg["state_preprocessor_kwargs"].update(
@@ -537,9 +554,9 @@ class Runner:
 
         :return: Agent instances
         """
-        print("Generating agent instance...",cfg["agent"])
         if "class" not in cfg["agent"]:
-            self._generate_agents(self._env, copy.deepcopy(self._cfg), self._models)
+            return self._generate_agents(self._env, copy.deepcopy(self._cfg), self._models)
+            print("321"*10)
         else:
             multi_agent = isinstance(env, MultiAgentEnvWrapper)
             device = env.device
@@ -584,6 +601,7 @@ class Runner:
                     )
                     amp_observation_space = observation_spaces[agent_id]
                 agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
+                print(cfg["agent"])
                 agent_cfg.update(self._process_cfg(cfg["agent"]))
                 agent_cfg["state_preprocessor_kwargs"].update({"size": observation_spaces[agent_id], "device": device})
                 agent_cfg["value_preprocessor_kwargs"].update({"size": 1, "device": device})
@@ -690,6 +708,7 @@ class Runner:
                     "shared_observation_spaces": state_spaces,
                     "possible_agents": possible_agents,
                 }
+        print("_generate_agent"*10)
         return self._component(agent_class)(cfg=agent_cfg, device=device, **agent_kwargs)
 
     def _generate_trainer(
@@ -703,6 +722,7 @@ class Runner:
 
         :return: Trainer instances
         """
+        print("trainer_class"*10)
         # get trainer class and remove 'class' field
         try:
             trainer_class = self._component(cfg["trainer"]["class"])
@@ -711,6 +731,8 @@ class Runner:
             trainer_class = self._component("SequentialTrainer")
             logger.warning("No 'class' field defined in 'trainer' cfg. 'SequentialTrainer' will be used as default")
         # instantiate trainer
+
+        print("trainer_class"*10)
         return trainer_class(env=env, agents=agent, cfg=cfg["trainer"])
 
     def run(self, mode: str = "train") -> None:
@@ -720,6 +742,7 @@ class Runner:
 
         :raises ValueError: The specified running mode is not valid
         """
+        print("run"*10)
         if mode == "train":
             self._trainer.train()
         elif mode == "eval":
