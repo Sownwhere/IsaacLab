@@ -244,9 +244,14 @@ class MAAMP(MultiAgentSuper):
         self._amp_learning_rate = self.cfg["AMP"]["learning_rate"]
         self._amp_learning_rate_scheduler = self.cfg["AMP"]["learning_rate_scheduler"]
 
+        
         self._amp_state_preprocessor = self.cfg["AMP"]["state_preprocessor"]
+        self._amp_state_preprocessor_kwargs = self.cfg["AMP"]["state_preprocessor_kwargs"]
         self._amp_value_preprocessor = self.cfg["AMP"]["value_preprocessor"]
+        self._amp_value_preprocessor_kwargs = self.cfg["AMP"]["value_preprocessor_kwargs"]
         self._amp_amp_state_preprocessor = self.cfg["AMP"]["amp_state_preprocessor"]
+        self._amp_amp_state_preprocessor_kwargs = self.cfg["AMP"]["amp_state_preprocessor_kwargs"]
+
 
         self._amp_discount_factor = self.cfg["AMP"]["discount_factor"]
         self._amp_lambda = self.cfg["AMP"]["lambda"]
@@ -349,22 +354,21 @@ class MAAMP(MultiAgentSuper):
         else:
             self._ppo_value_preprocessor = self._empty_preprocessor
 
-
         if self._amp_state_preprocessor:
-            self._amp_state_preprocessor = self._amp_state_preprocessor(**self.cfg["AMP"]["state_preprocessor_kwargs"])
+            self._amp_state_preprocessor = self._amp_state_preprocessor(**self._amp_state_preprocessor_kwargs)
             self.checkpoint_modules["humanoid"]["state_preprocessor"] = self._amp_state_preprocessor
         else:
             self._amp_state_preprocessor = self._empty_preprocessor
 
-        if self._value_preprocessor:
-            self._value_preprocessor = self._value_preprocessor(**self.cfg["value_preprocessor_kwargs"])
-            self.checkpoint_modules["humanoid"]["value_preprocessor"] = self._value_preprocessor
+        if self._amp_value_preprocessor:
+            self._amp_value_preprocessor = self._amp_value_preprocessor(**self._amp_value_preprocessor_kwargs)
+            self.checkpoint_modules["humanoid"]["value_preprocessor"] = self._amp_value_preprocessor
         else:
             self._value_preprocessor = self._empty_preprocessor
 
-        if self._amp_state_preprocessor:
-            self._amp_state_preprocessor = self._amp_state_preprocessor(**self.cfg["AMP"]["amp_state_preprocessor_kwargs"])
-            self.checkpoint_modules["humanoid"]["amp_state_preprocessor"] = self._amp_state_preprocessor
+        if self._amp_amp_state_preprocessor:
+            self._amp_amp_state_preprocessor = self._amp_amp_state_preprocessor(**self._amp_amp_state_preprocessor_kwargs)
+            self.checkpoint_modules["humanoid"]["amp_state_preprocessor"] = self._amp_amp_state_preprocessor
         else:
             self._amp_state_preprocessor = self._empty_preprocessor
         
