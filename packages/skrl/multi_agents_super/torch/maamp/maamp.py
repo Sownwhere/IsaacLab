@@ -259,7 +259,7 @@ class MAAMP(MultiAgentSuper):
         self._amp_random_timesteps = self.cfg["AMP"]["random_timesteps"]
         self._amp_learning_starts = self.cfg["AMP"]["learning_starts"]
 
-        self._amp_amp_batch_size = self.cfg["AMP"]["amp_batch_size"]
+        self._amp_batch_size = self.cfg["AMP"]["amp_batch_size"]
         self._amp_task_reward_weight = self.cfg["AMP"]["task_reward_weight"]
         self._amp_style_reward_weight = self.cfg["AMP"]["style_reward_weight"]
 
@@ -374,7 +374,44 @@ class MAAMP(MultiAgentSuper):
         
         print("__init__ finished")
 
-#     def init(self, trainer_cfg: Optional[Mapping[str, Any]] = None) -> None:
+    def init(self, trainer_cfg: Optional[Mapping[str, Any]] = None) -> None:
+        """Initialize the agent"""
+        super().init(trainer_cfg=trainer_cfg)
+        self.set_mode("eval")
+
+        # create tensors in memories
+        if self.memories:
+            for uid in self.possible_agents:
+                self.memories[uid].create_tensor(name="states", size=self.observation_spaces[uid], dtype=torch.float32)
+                self.memories[uid].create_tensor(name="actions", size=self.action_spaces[uid], dtype=torch.float32)
+                self.memories[uid].create_tensor(name="rewards", size=1, dtype=torch.float32)
+                self.memories[uid].create_tensor(name="terminated", size=1, dtype=torch.bool)
+                self.memories[uid].create_tensor(name="truncated", size=1, dtype=torch.bool)
+                self.memories[uid].create_tensor(name="log_prob", size=1, dtype=torch.float32)
+                self.memories[uid].create_tensor(name="values", size=1, dtype=torch.float32)
+                self.memories[uid].create_tensor(name="returns", size=1, dtype=torch.float32)
+                self.memories[uid].create_tensor(name="advantages", size=1, dtype=torch.float32)
+
+                self.memories[uid].create_tensor(name="amp_states", size=self.amp_observation_space, dtype=torch.float32)
+                self.memories[uid].create_tensor(name="next_values", size=1, dtype=torch.float32)
+
+                # tensors sampled during training
+                self._tensors_names = ["states", "actions", "log_prob", "values", "returns", "advantages","amp_states","next_values"]
+
+        # create tensors for motion dataset and reply buffer
+        if self.motion_dataset is not None:
+            self.motion_dataset.create_tensor(name="states", size=self.amp_observation_space, dtype=torch.float32)
+            self.reply_buffer.create_tensor(name="states", size=self.amp_observation_space, dtype=torch.float32)
+
+            # initialize motion dataset
+            for _ in range(math.ceil(self.motion_dataset.memory_size / self._amp_batch_size)):
+                self.motion_dataset.add_samples(states=self.collect_reference_motions(self._amp_batch_size))
+        # create temporary variables needed for storage and computation
+        self._current_log_prob = []
+        self._current_next_states = []
+
+
+        print("finish init")
 #         """Initialize the agent"""
 #         super().init(trainer_cfg=trainer_cfg)
 #         self.set_mode("eval")
