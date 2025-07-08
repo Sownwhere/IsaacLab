@@ -137,7 +137,10 @@ class MAAMP(MultiAgentSuper):
         action_spaces: Optional[Union[Mapping[str, int], Mapping[str, gymnasium.Space]]] = None,
         device: Optional[Union[str, torch.device]] = None,
         cfg: Optional[dict] = None,
-       
+        motion_dataset: Optional[Memory] = None,
+        reply_buffer: Optional[Memory] = None,
+        collect_reference_motions: Optional[Callable[[int], torch.Tensor]] = None,
+        collect_observation: Optional[Callable[[], torch.Tensor]] = None,
         # memory: Optional[Union[Memory, Tuple[Memory]]] = None,
         # observation_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
         # action_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
@@ -148,7 +151,6 @@ class MAAMP(MultiAgentSuper):
         # collect_observation: Optional[Callable[[], torch.Tensor]] = None,
     ) -> None:
         # 解析模式：PPO / AMP
-        print("hello")
         # self.mode = cfg.get("mode", "PPO").upper() if cfg else "PPO"
         # assert self.mode in ["PPO", "AMP"], f"Unsupported mode: {self.mode}"
 
@@ -166,15 +168,15 @@ class MAAMP(MultiAgentSuper):
 
         # models
         self.policies = {uid: self.models[uid].get("policy", None) for uid in self.possible_agents}
-        print(self.policies)
         self.values = {uid: self.models[uid].get("value", None) for uid in self.possible_agents}
-        print(self.values)
-
+        self.discriminator = {uid: self.models[uid].get("discriminator", None) for uid in self.possible_agents}
+        
 
         for uid in self.possible_agents:
             # checkpoint models
             self.checkpoint_modules[uid]["policy"] = self.policies[uid]
             self.checkpoint_modules[uid]["value"] = self.values[uid]
+            self.checkpoint_modules[uid]["discriminator"] = self.discriminator[uid]
 
             # broadcast models' parameters in distributed runs
             if config.torch.is_distributed:
@@ -182,11 +184,13 @@ class MAAMP(MultiAgentSuper):
                 if self.policies[uid] is not None:
                     self.policies[uid].broadcast_parameters()
                     if self.values[uid] is not None and self.policies[uid] is not self.values[uid]:
-                        self.values[uid].broadcast_parameters()
+                        self.values[uid].broadcast_parameters() 
+                if self.discriminator[uid] is not None:
+                    self.discriminator[uid].broadcast_parameters()      
 
         # configuration
         print("Configuration:")
-        print(self.cfg)
+        # print(self.cfg)
         self._ppo_learning_epochs = self.cfg["PPO"]["learning_epochs"]
         self._ppo_mini_batches = self.cfg["PPO"]["mini_batches"]
         self._ppo_rollouts = self.cfg["PPO"]["rollouts"]
@@ -265,7 +269,14 @@ class MAAMP(MultiAgentSuper):
 
         self._amp_mixed_precision = self.cfg["AMP"]["mixed_precision"]
 
-        print(f"AMP: {self.cfg['AMP']}")
+        if observation_spaces is not None:
+            self.amp_observation_space = observation_spaces['humanoid']
+        else:
+            print("observation is None!")
+        self.motion_dataset = motion_dataset
+        self.reply_buffer = reply_buffer
+        self.collect_reference_motions = collect_reference_motions
+        self.collect_observation = collect_observation
 
 
         # set up automatic mixed precision
@@ -280,131 +291,84 @@ class MAAMP(MultiAgentSuper):
         self.schedulers = {}
 
         print("Setting up optimizers and learning rate schedulers...")
-        for uid in self.possible_agents:
-            policy = self.policies[uid]
-            value = self.values[uid]
-            if policy is not None and value is not None:
-                if policy is value:
-                    optimizer = torch.optim.Adam(policy.parameters(), lr=self._ppo_learning_rate[uid])
-                else:
-                    print(self._ppo_learning_rate[uid])
-                    optimizer = torch.optim.Adam(
-                        itertools.chain(policy.parameters(), value.parameters()), lr=self._ppo_learning_rate[uid]
-                    )
-                self.optimizers[uid] = optimizer
-                if self._ppo_learning_rate_scheduler[uid] is not None:
-                    self.schedulers[uid] = self._ppo_learning_rate_scheduler[uid](
-                        optimizer, **self._ppo_learning_rate_scheduler_kwargs[uid]
-                    )
+        # for uid in self.possible_agents:
+        #     print(f"  {uid}")
+
+        ppo_policy = self.policies["exo"]
+        ppo_value = self.values["exo"]
+        # print(f"  {uid}: policy={policy} value={value}")
+        if ppo_policy is not None and ppo_value is not None:
+            if ppo_policy is ppo_value:
+                optimizer = torch.optim.Adam(ppo_policy.parameters(), lr=self._ppo_learning_rate[uid])
+            else:
+                print(" self._ppo_learning_rate: ", self._ppo_learning_rate)
+                optimizer = torch.optim.Adam(
+                    itertools.chain(ppo_policy.parameters(), ppo_value.parameters()), lr=self._ppo_learning_rate
+                )
+            self.optimizers["exo"] = optimizer
+            if self._ppo_learning_rate_scheduler is not None:
+                self.schedulers["exo"] = self._ppo_learning_rate_scheduler(
+                    optimizer, **self._ppo_learning_rate_scheduler_kwargs
+                )
+        self.checkpoint_modules["exo"]["optimizer"] = self.optimizers[uid]
+    
+        self.checkpoint_modules["humanoid"]["discriminator"] =  self.discriminator["humanoid"]
 
 
-#         self.amp_observation_space = amp_observation_space
-#         self.motion_dataset = motion_dataset
-#         self.reply_buffer = reply_buffer
-#         self.collect_reference_motions = collect_reference_motions
-#         self.collect_observation = collect_observation
+        # # set up automatic mixed precision
+        # self._device_type = torch.device(device).type
+        # if version.parse(torch.__version__) >= version.parse("2.4"):
+        #     self.scaler = torch.amp.GradScaler(device=self._device_type, enabled=self._mixed_precision)
+        # else:
+        #     self.scaler = torch.cuda.amp.GradScaler(enabled=self._mixed_precision)
 
-#         # models
-#         self.policy = self.models.get("policy", None)
-#         self.value = self.models.get("value", None)
-#         self.discriminator = self.models.get("discriminator", None)
+        # set up optimizer and learning rate scheduler
+        if self.policies["humanoid"] is not None and self.values["humanoid"] is not None and self.discriminator["humanoid"] is not None:
+            self.optimizer = torch.optim.Adam(
+                itertools.chain(self.policies["humanoid"].parameters(),self.values["humanoid"].parameters(), self.discriminator["humanoid"].parameters()),
+                lr=self._amp_learning_rate,
+            )
+            if self._amp_learning_rate_scheduler is not None:
+                self.scheduler = self._amp_learning_rate_scheduler(
+                    self.optimizer, **self.cfg["learning_rate_scheduler_kwargs"]
+                )
 
-#         # checkpoint models
-#         self.checkpoint_modules["policy"] = self.policy
-#         self.checkpoint_modules["value"] = self.value
-#         self.checkpoint_modules["discriminator"] = self.discriminator
+            self.checkpoint_modules["humanoid"]["optimizer"] = self.optimizer
 
-#         # broadcast models' parameters in distributed runs
-#         if config.torch.is_distributed:
-#             logger.info(f"Broadcasting models' parameters")
-#             if self.policy is not None:
-#                 self.policy.broadcast_parameters()
-#             if self.value is not None:
-#                 self.value.broadcast_parameters()
-#             if self.discriminator is not None:
-#                 self.discriminator.broadcast_parameters()
+        # set up preprocessors
 
-#         # configuration
-#         self._learning_epochs = self.cfg["learning_epochs"]
-#         self._mini_batches = self.cfg["mini_batches"]
-#         self._rollouts = self.cfg["rollouts"]
-#         self._rollout = 0
+        if self._ppo_state_preprocessor is not None:
+            self._ppo_state_preprocessor= self._ppo_state_preprocessor(**self._ppo_state_preprocessor_kwargs)
+            self.checkpoint_modules["exo"]["state_preprocessor"] = self._ppo_state_preprocessor
+        else:
+            self._ppo_state_preprocessor = self._empty_preprocessor
 
-#         self._grad_norm_clip = self.cfg["grad_norm_clip"]
-#         self._ratio_clip = self.cfg["ratio_clip"]
-#         self._value_clip = self.cfg["value_clip"]
-#         self._clip_predicted_values = self.cfg["clip_predicted_values"]
+        if self._ppo_value_preprocessor is not None:
+            self._ppo_value_preprocessor = self._ppo_value_preprocessor(**self._ppo_value_preprocessor_kwargs)
+            self.checkpoint_modules["exo"]["value_preprocessor"] = self._ppo_value_preprocessor
+        else:
+            self._ppo_value_preprocessor = self._empty_preprocessor
 
-#         self._value_loss_scale = self.cfg["value_loss_scale"]
-#         self._entropy_loss_scale = self.cfg["entropy_loss_scale"]
-#         self._discriminator_loss_scale = self.cfg["discriminator_loss_scale"]
 
-#         self._learning_rate = self.cfg["learning_rate"]
-#         self._learning_rate_scheduler = self.cfg["learning_rate_scheduler"]
+        if self._amp_state_preprocessor:
+            self._amp_state_preprocessor = self._amp_state_preprocessor(**self.cfg["AMP"]["state_preprocessor_kwargs"])
+            self.checkpoint_modules["humanoid"]["state_preprocessor"] = self._amp_state_preprocessor
+        else:
+            self._amp_state_preprocessor = self._empty_preprocessor
 
-#         self._state_preprocessor = self.cfg["state_preprocessor"]
-#         self._value_preprocessor = self.cfg["value_preprocessor"]
-#         self._amp_state_preprocessor = self.cfg["amp_state_preprocessor"]
+        if self._value_preprocessor:
+            self._value_preprocessor = self._value_preprocessor(**self.cfg["value_preprocessor_kwargs"])
+            self.checkpoint_modules["humanoid"]["value_preprocessor"] = self._value_preprocessor
+        else:
+            self._value_preprocessor = self._empty_preprocessor
 
-#         self._discount_factor = self.cfg["discount_factor"]
-#         self._lambda = self.cfg["lambda"]
-
-#         self._random_timesteps = self.cfg["random_timesteps"]
-#         self._learning_starts = self.cfg["learning_starts"]
-
-#         self._amp_batch_size = self.cfg["amp_batch_size"]
-#         self._task_reward_weight = self.cfg["task_reward_weight"]
-#         self._style_reward_weight = self.cfg["style_reward_weight"]
-
-#         self._discriminator_batch_size = self.cfg["discriminator_batch_size"]
-#         self._discriminator_reward_scale = self.cfg["discriminator_reward_scale"]
-#         self._discriminator_logit_regularization_scale = self.cfg["discriminator_logit_regularization_scale"]
-#         self._discriminator_gradient_penalty_scale = self.cfg["discriminator_gradient_penalty_scale"]
-#         self._discriminator_weight_decay_scale = self.cfg["discriminator_weight_decay_scale"]
-
-#         self._rewards_shaper = self.cfg["rewards_shaper"]
-#         self._time_limit_bootstrap = self.cfg["time_limit_bootstrap"]
-
-#         self._mixed_precision = self.cfg["mixed_precision"]
-
-#         # set up automatic mixed precision
-#         self._device_type = torch.device(device).type
-#         if version.parse(torch.__version__) >= version.parse("2.4"):
-#             self.scaler = torch.amp.GradScaler(device=self._device_type, enabled=self._mixed_precision)
-#         else:
-#             self.scaler = torch.cuda.amp.GradScaler(enabled=self._mixed_precision)
-
-#         # set up optimizer and learning rate scheduler
-#         if self.policy is not None and self.value is not None and self.discriminator is not None:
-#             self.optimizer = torch.optim.Adam(
-#                 itertools.chain(self.policy.parameters(), self.value.parameters(), self.discriminator.parameters()),
-#                 lr=self._learning_rate,
-#             )
-#             if self._learning_rate_scheduler is not None:
-#                 self.scheduler = self._learning_rate_scheduler(
-#                     self.optimizer, **self.cfg["learning_rate_scheduler_kwargs"]
-#                 )
-
-#             self.checkpoint_modules["optimizer"] = self.optimizer
-
-#         # set up preprocessors
-#         if self._state_preprocessor:
-#             self._state_preprocessor = self._state_preprocessor(**self.cfg["state_preprocessor_kwargs"])
-#             self.checkpoint_modules["state_preprocessor"] = self._state_preprocessor
-#         else:
-#             self._state_preprocessor = self._empty_preprocessor
-
-#         if self._value_preprocessor:
-#             self._value_preprocessor = self._value_preprocessor(**self.cfg["value_preprocessor_kwargs"])
-#             self.checkpoint_modules["value_preprocessor"] = self._value_preprocessor
-#         else:
-#             self._value_preprocessor = self._empty_preprocessor
-
-#         if self._amp_state_preprocessor:
-#             self._amp_state_preprocessor = self._amp_state_preprocessor(**self.cfg["amp_state_preprocessor_kwargs"])
-#             self.checkpoint_modules["amp_state_preprocessor"] = self._amp_state_preprocessor
-#         else:
-#             self._amp_state_preprocessor = self._empty_preprocessor
+        if self._amp_state_preprocessor:
+            self._amp_state_preprocessor = self._amp_state_preprocessor(**self.cfg["AMP"]["amp_state_preprocessor_kwargs"])
+            self.checkpoint_modules["humanoid"]["amp_state_preprocessor"] = self._amp_state_preprocessor
+        else:
+            self._amp_state_preprocessor = self._empty_preprocessor
+        
+        print("__init__ finished")
 
 #     def init(self, trainer_cfg: Optional[Mapping[str, Any]] = None) -> None:
 #         """Initialize the agent"""
