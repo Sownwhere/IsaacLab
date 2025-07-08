@@ -11,6 +11,7 @@ from skrl.resources.preprocessors.torch import RunningStandardScaler  # noqa
 from skrl.resources.schedulers.torch import KLAdaptiveLR  # noqa
 from skrl.trainers.torch import Trainer
 from skrl.utils import set_seed
+from collections import defaultdict
 
 
 class Runner:
@@ -223,17 +224,15 @@ class Runner:
         agent_class = cfg.get("agent", {}).get("class", "").lower()
 
         # instantiate models
-        models = {}
-        for agent_id in possible_agents:
-            _cfg = copy.deepcopy(cfg)
-            models[agent_id] = {}
-            models_cfg = _cfg.get("models")
-            
-            separate = models_cfg.pop("separate", True)
-            multi_policy = models_cfg.pop("multi_policy", False)
+        
+        models = defaultdict(dict)
+        for agent_id in possible_agents:            
 
             # 从每个 agent 的配置中读取模型结构
             all_models_cfg = copy.deepcopy(cfg.get("models", {}))
+            separate = all_models_cfg.pop("separate", True)
+            multi_policy = all_models_cfg.pop("multi_policy", False)
+
             models_cfg = all_models_cfg.get(agent_id, {})
 
             # 判断是“老格式”（统一配置）还是“新格式”（每个 agent 单独配置）
@@ -243,6 +242,7 @@ class Runner:
                 models_cfg = all_models_cfg.get(agent_id, {})
             else:
                 # ✅ 旧格式：所有 agent 使用相同配置
+                print(f"[INFO]: Using old format for agent {agent_id}.")
                 models_cfg = copy.deepcopy(all_models_cfg)
 
             if not models_cfg:
