@@ -409,86 +409,59 @@ class MAAMP(MultiAgentSuper):
         # create temporary variables needed for storage and computation
         self._current_log_prob = []
         self._current_next_states = []
+        self._current_states = None
 
 
         print("finish init")
-#         """Initialize the agent"""
-#         super().init(trainer_cfg=trainer_cfg)
-#         self.set_mode("eval")
 
-#         # create tensors in memory
-#         if self.memory is not None:
-#             self.memory.create_tensor(name="states", size=self.observation_space, dtype=torch.float32)
-#             self.memory.create_tensor(name="next_states", size=self.observation_space, dtype=torch.float32)
-#             self.memory.create_tensor(name="actions", size=self.action_space, dtype=torch.float32)
-#             self.memory.create_tensor(name="rewards", size=1, dtype=torch.float32)
-#             self.memory.create_tensor(name="terminated", size=1, dtype=torch.bool)
-#             self.memory.create_tensor(name="truncated", size=1, dtype=torch.bool)
-#             self.memory.create_tensor(name="log_prob", size=1, dtype=torch.float32)
-#             self.memory.create_tensor(name="values", size=1, dtype=torch.float32)
-#             self.memory.create_tensor(name="returns", size=1, dtype=torch.float32)
-#             self.memory.create_tensor(name="advantages", size=1, dtype=torch.float32)
+    def act(self, states: Mapping[str, torch.Tensor], timestep: int, timesteps: int) -> torch.Tensor:
+    # torch.Tensor:
+        """Process the environment's states to make a decision (actions) using the main policies
 
-#             self.memory.create_tensor(name="amp_states", size=self.amp_observation_space, dtype=torch.float32)
-#             self.memory.create_tensor(name="next_values", size=1, dtype=torch.float32)
+        :param states: Environment's states
+        :type states: dictionary of torch.Tensor
+        :param timestep: Current timestep
+        :type timestep: int
+        :param timesteps: Number of timesteps
+        :type timesteps: int
 
-#         self.tensors_names = [
-#             "states",
-#             "actions",
-#             "rewards",
-#             "next_states",
-#             "terminated",
-#             "log_prob",
-#             "values",
-#             "returns",
-#             "advantages",
-#             "amp_states",
-#             "next_values",
-#         ]
+        :return: Actions
+        :rtype: torch.Tensor
+        """
+        # # sample random actions
+        # # TODO: fix for stochasticity, rnn and log_prob
+        # if timestep < self._random_timesteps:
+        #     return self.policy.random_act({"states": states}, role="policy")
 
-#         # create tensors for motion dataset and reply buffer
-#         if self.motion_dataset is not None:
-#             self.motion_dataset.create_tensor(name="states", size=self.amp_observation_space, dtype=torch.float32)
-#             self.reply_buffer.create_tensor(name="states", size=self.amp_observation_space, dtype=torch.float32)
+        # sample stochastic actions
+        with torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
 
-#             # initialize motion dataset
-#             for _ in range(math.ceil(self.motion_dataset.memory_size / self._amp_batch_size)):
-#                 self.motion_dataset.add_samples(states=self.collect_reference_motions(self._amp_batch_size))
+        # for uid in self.possible_agents:
+        #     print(uid)
+            data =[]
 
-#         # create temporary variables needed for storage and computation
-#         self._current_log_prob = None
-#         self._current_states = None
+            preprocessed_state = self._ppo_state_preprocessor(states["exo"])
+            output = self.policies["exo"].act({"states": preprocessed_state}, role="policy")
 
-#     def act(self, states: torch.Tensor, timestep: int, timesteps: int) -> torch.Tensor:
-#         """Process the environment's states to make a decision (actions) using the main policy
 
-#         :param states: Environment's states
-#         :type states: torch.Tensor
-#         :param timestep: Current timestep
-#         :type timestep: int
-#         :param timesteps: Number of timesteps
-#         :type timesteps: int
+            data.append(output)
 
-#         :return: Actions
-#         :rtype: torch.Tensor
-#         """
-#         # use collected states
-#         if self._current_states is not None:
-#             states = self._current_states
+            if self._current_states is not None:
+                preprocessed_state = self._amp_state_preprocessor(self._current_states)
+            else: 
+                preprocessed_state = self._amp_state_preprocessor(states["humanoid"])
+            output = self.policies["humanoid"].act({"states": preprocessed_state}, role="policy")
 
-#         states = self._state_preprocessor(states)
+            data.append(output)
 
-#         # sample random actions
-#         # TODO, check for stochasticity
-#         if timestep < self._random_timesteps:
-#             return self.policy.random_act({"states": states}, role="policy")
+            actions = {uid: d[0] for uid, d in zip(self.possible_agents, data)}
+            log_prob = {uid: d[1] for uid, d in zip(self.possible_agents, data)}
+            outputs = {uid: d[2] for uid, d in zip(self.possible_agents, data)}
 
-#         # sample stochastic actions
-#         with torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
-#             actions, log_prob, outputs = self.policy.act({"states": states}, role="policy")
-#             self._current_log_prob = log_prob
+            self._current_log_prob = log_prob
 
-#         return actions, log_prob, outputs
+            # self._current_log_prob = log_prob
+        return actions, log_prob, outputs
 
 #     def record_transition(
 #         self,
