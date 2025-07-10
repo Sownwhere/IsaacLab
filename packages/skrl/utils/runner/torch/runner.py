@@ -249,7 +249,7 @@ class Runner:
                 raise ValueError(f"No model configuration found for agent '{agent_id}' in cfg['models']")
 
             # get separate (non-shared) configuration and remove 'separate' key
-           
+            print(f"[INFO]: Using separate model configuration for env.amp_observation_space {env.amp_observation_space}.")
             if multi_policy:
                 for role in models_cfg:
                     print(f"[INFO] Instantiating model '{role}' for agent '{agent_id}'")
@@ -413,15 +413,6 @@ class Runner:
         # 判断是否是新格式：所有 key 都是合法 agent_id
         per_agent_cfg = agent_keys.issubset(set(possible_agents))
 
-
-        # # 判断 agent 配置是否为每个 agent 单独配置（新格式）
-        # per_agent_cfg = False
-        # agent_cfg_all = cfg.get("agent", {})
-        # if any(agent_id in agent_cfg_all for agent_id in possible_agents):
-        #     per_agent_cfg = True
-        
-        # agent_key = list(agent_cfg_all["agent"].keys())[0]
-
         agent_class = "maamp"
 
         # check for memory configuration (backward compatibility)
@@ -438,33 +429,70 @@ class Runner:
             memory_class = self._component("RandomMemory")
             logger.warning("No 'class' field defined in 'memory' cfg. 'RandomMemory' will be used as default")
         memories = {}
-
-
-        # instantiate memory 
-        #
+        ## instantiate memory 
         if cfg["memory"]["memory_size"] < 0:
-            cfg["memory"]["memory_size"] = cfg["agent"]["PPO"]["rollouts"]  # memory_size is the agent's number of rollouts
+            cfg["memory"]["memory_size"] = cfg["agent"]["AMP"]["rollouts"]  # memory_size is the agent's number of rollouts
         for agent_id in possible_agents:
             memories[agent_id] = memory_class(num_envs=num_envs, device=device, **self._process_cfg(cfg["memory"]))
 
+        ## amp observation space
+        try:
+            amp_observation_space = env.amp_observation_space
+        except Exception as e:
+            logger.warning(
+                "Unable to get AMP space via 'env.amp_observation_space'. Using 'env.observation_space' instead"
+            )
+            amp_observation_space = observation_spaces["humanoid"]
 
-        # # 获取所有智能体名称列表
+
+        ## 获取所有智能体名称列表
         agent_names = [name for name, config in agent_cfg_all.items() 
                     if isinstance(config, dict) and "class" in config]
         
         agent_cfg = self._component(f"MAAMP_DEFAULT_CONFIG").copy()
 
         agent_cfg.update(self._process_cfg(agent_cfg_all))
+
         for agent_name in agent_names:
             agent_cfg[agent_name]["state_preprocessor_kwargs"].update(
                 {agent_id: {"size": observation_spaces[agent_id], "device": device}})
             agent_cfg[agent_name]["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+        
+        agent_cfg["AMP"]["amp_state_preprocessor_kwargs"].update({"size": amp_observation_space, "device": device})
+
+        motion_dataset = None
+        if cfg.get("motion_dataset"):
+            motion_dataset_class = cfg["motion_dataset"].get("class")
+            if not motion_dataset_class:
+                raise ValueError(f"No 'class' field defined in 'motion_dataset' cfg")
+            del cfg["motion_dataset"]["class"]
+            motion_dataset = self._component(motion_dataset_class)(
+                device=device, **self._process_cfg(cfg.get("motion_dataset", {}))
+            )
+        reply_buffer = None
+        if cfg.get("reply_buffer"):
+            reply_buffer_class = cfg["reply_buffer"].get("class")
+            if not reply_buffer_class:
+                raise ValueError(f"No 'class' field defined in 'reply_buffer' cfg")
+            del cfg["reply_buffer"]["class"]
+            reply_buffer = self._component(reply_buffer_class)(
+                device=device, **self._process_cfg(cfg.get("reply_buffer", {}))
+            )
+
+
+
+
+ 
+
         agent_kwargs = {
             "models": models,
             "memories": memories,
             "observation_spaces": observation_spaces,
             "action_spaces": action_spaces,
             "possible_agents": possible_agents,
+            "motion_dataset": motion_dataset,
+            "reply_buffer": reply_buffer,
+            "collect_reference_motions": lambda num_samples: env.collect_reference_motions(num_samples),
         }
 
         
@@ -529,6 +557,7 @@ class Runner:
                         "Unable to get AMP space via 'env.amp_observation_space'. Using 'env.observation_space' instead"
                     )
                     amp_observation_space = observation_spaces[agent_id]
+
                 agent_cfg = self._component(f"{agent_class}_DEFAULT_CONFIG").copy()
                 agent_cfg.update(self._process_cfg(cfg["agent"]))
                 agent_cfg["state_preprocessor_kwargs"].update({"size": observation_spaces[agent_id], "device": device})
