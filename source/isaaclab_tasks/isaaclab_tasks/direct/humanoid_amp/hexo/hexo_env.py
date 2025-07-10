@@ -87,7 +87,8 @@ class HexoEnv(DirectMARLEnv):
         light_cfg.func("/World/Light", light_cfg)
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
-        self.actions = actions.clone()
+        self.actions = {k: v.clone() for k, v in actions.items()}
+
 
     def _apply_action(self) -> None:
         self.robot.set_joint_effort_target(
