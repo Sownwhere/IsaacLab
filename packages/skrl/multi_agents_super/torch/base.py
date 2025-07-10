@@ -110,6 +110,9 @@ class MultiAgentSuper:
             experiment_name = f"{datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S-%f')}_{self.__class__.__name__}"
         self.experiment_dir = os.path.join(directory, experiment_name)
 
+        # BW
+        self.secondary_memories = []
+
     def __str__(self) -> str:
         """Generate a representation of the agent as string
 
@@ -126,25 +129,26 @@ class MultiAgentSuper:
                 string += f"\n  |-- {k}: {v}"
         return string
 
-    def _as_dict(self, _input: Any) -> Mapping[str, Any]:
-        """Convert a configuration value into a dictionary according to the number of agents
+    # def _as_dict(self, _input: Any) -> Mapping[str, Any]:
+    #     """Convert a configuration value into a dictionary according to the number of agents
 
-        :param _input: Configuration value
-        :type _input: Any
+    #     :param _input: Configuration value
+    #     :type _input: Any
 
-        :raises ValueError: The configuration value is a dictionary different from the number of agents
+    #     :raises ValueError: The configuration value is a dictionary different from the number of agents
 
-        :return: Configuration value as a dictionary
-        :rtype: list of any configuration value
-        """
-        if _input and isinstance(_input, collections.abc.Mapping):
-            if set(_input) < set(self.possible_agents):
-                logger.error("The configuration value does not match possible agents")
-                raise ValueError("The configuration value does not match possible agents")
-            elif set(_input) >= set(self.possible_agents):
-                return _input
-        return {name: copy.deepcopy(_input) for name in self.possible_agents}
-
+    #     :return: Configuration value as a dictionary
+    #     :rtype: list of any configuration value
+    #     """
+    #     if _input and isinstance(_input, collections.abc.Mapping):
+    #         if set(_input) < set(self.possible_agents):
+    #             logger.error("The configuration value does not match possible agents")
+    #             raise ValueError("The configuration value does not match possible agents")
+    #         elif set(_input) >= set(self.possible_agents):
+    #             return _input
+    #     return {name: copy.deepcopy(_input) for name in self.possible_agents}
+    def _as_dict(self, _input: Any) -> Any:
+        print("_as_dict " ,_input)
     def _empty_preprocessor(self, _input: Any, *args, **kwargs) -> Any:
         """Empty preprocess method
 

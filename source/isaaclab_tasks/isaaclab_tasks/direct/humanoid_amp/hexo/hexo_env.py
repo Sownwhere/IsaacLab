@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import gymnasium as gym
+import numpy as np
 import math
 import torch
 from collections.abc import Sequence
@@ -15,7 +17,10 @@ from isaaclab.assets import Articulation
 from isaaclab.envs import DirectMARLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import sample_uniform
+from isaaclab.utils.math import quat_rotate
+
 from .hexo_env_cfg import HexoEnvCfg
+from ..motions.python import MotionLoader
 
 class HexoEnv(DirectMARLEnv):
     cfg: HexoEnvCfg
@@ -29,6 +34,46 @@ class HexoEnv(DirectMARLEnv):
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
 
+        # action offset and scale
+        dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
+        dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
+        self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
+        self.action_scale = dof_upper_limits - dof_lower_limits
+
+        # load motion
+        self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
+
+        # DOF and key body indexes  
+        # key_body_names = ["base_link"]  
+        key_body_names = [ 
+            # 'left_leg_pitch_link',
+            # 'left_leg_roll_link',
+            'left_leg_yaw_link',
+            'left_knee_link',
+            # 'left_ankle_pitch_link',
+            'left_ankle_roll_link',
+
+            # 'right_leg_pitch_link',
+            # 'right_leg_roll_link',
+            'right_leg_yaw_link',
+            'right_knee_link',
+            # 'right_ankle_pitch_link',
+            'right_ankle_roll_link',
+        ]
+
+        self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
+        self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
+        # Used to for reset strategy
+        self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
+        self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
+        self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
+
+        # reconfigure AMP observation space according to the number of observations and create the buffer
+        self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space
+        self.amp_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.amp_observation_size,))
+        self.amp_observation_buffer = torch.zeros(
+            (self.num_envs, self.cfg.num_amp_observations, self.cfg.amp_observation_space), device=self.device
+        )
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
         # add ground plane
@@ -42,7 +87,7 @@ class HexoEnv(DirectMARLEnv):
         light_cfg.func("/World/Light", light_cfg)
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
-        self.actions = actions
+        self.actions = actions.clone()
 
     def _apply_action(self) -> None:
         self.robot.set_joint_effort_target(
@@ -53,23 +98,46 @@ class HexoEnv(DirectMARLEnv):
         )
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
-        observations = {
-            "humanoid": torch.cat(
-                (
-                    self.joint_pos[:, self._humanoid_dof_idx[0]].unsqueeze(dim=1),
-                    self.joint_vel[:, self._humanoid_dof_idx[0]].unsqueeze(dim=1),
-                ),
-                dim=-1,
-            ),
-            "exo": torch.cat(
-                (
-                    self.joint_pos[:, self._exo_dof_idx[0]].unsqueeze(dim=1),
-                    self.joint_vel[:, self._exo_dof_idx[0]].unsqueeze(dim=1),
-                ),
-                dim=-1,
-            ),
+        # humanoid：使用 compute_obs 获取完整观测
+        humanoid_obs = compute_obs(
+            self.robot.data.joint_pos,
+            self.robot.data.joint_vel,
+            self.robot.data.body_pos_w[:, self.ref_body_index],
+            self.robot.data.body_quat_w[:, self.ref_body_index],
+            self.robot.data.body_lin_vel_w[:, self.ref_body_index],
+            self.robot.data.body_ang_vel_w[:, self.ref_body_index],
+            self.robot.data.body_pos_w[:, self.key_body_indexes],
+        )
+        print("++++++++++++++++")
+        # === 维护 AMP 历史 buffer ===
+        for i in reversed(range(self.cfg.num_amp_observations - 1)):
+            self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
+        self.amp_observation_buffer[:, 0] = humanoid_obs.clone()  # 最新的放在最前面
+
+        # 存入 extras 供外部使用
+        self.extras = {
+            "amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)
         }
-        return observations
+        print("++++++++++++++++")
+
+        # exo：保持原来的简单观测
+        exo_obs = torch.cat(
+            (
+                self.joint_pos[:, self._exo_dof_idx[0]].unsqueeze(dim=1),
+                self.joint_vel[:, self._exo_dof_idx[0]].unsqueeze(dim=1),
+                self.joint_pos[:, self._exo_dof_idx[1]].unsqueeze(dim=1),
+                self.joint_vel[:, self._exo_dof_idx[1]].unsqueeze(dim=1),
+            ),
+            dim=-1,
+        )
+        print("++++++++++++++++")
+        # 组合返回
+        return {
+            "exo": exo_obs,
+            "humanoid": humanoid_obs,
+            
+        }
+
 
     def _get_rewards(self) -> dict[str, torch.Tensor]:
         total_reward = compute_rewards(
@@ -146,3 +214,38 @@ def compute_rewards(
         "exo": rew_alive + rew_termination + rew_exo_vel,
     }
     return total_reward
+
+@torch.jit.script
+def quaternion_to_tangent_and_normal(q: torch.Tensor) -> torch.Tensor:
+    ref_tangent = torch.zeros_like(q[..., :3])
+    ref_normal = torch.zeros_like(q[..., :3])
+    ref_tangent[..., 0] = 1
+    ref_normal[..., -1] = 1
+    tangent = quat_rotate(q, ref_tangent)
+    normal = quat_rotate(q, ref_normal)
+    return torch.cat([tangent, normal], dim=len(tangent.shape) - 1)
+
+
+@torch.jit.script
+def compute_obs(
+    dof_positions: torch.Tensor,
+    dof_velocities: torch.Tensor,
+    root_positions: torch.Tensor,
+    root_rotations: torch.Tensor,
+    root_linear_velocities: torch.Tensor,
+    root_angular_velocities: torch.Tensor,
+    key_body_positions: torch.Tensor,
+) -> torch.Tensor:
+    obs = torch.cat(
+        (
+            dof_positions,
+            dof_velocities,
+            root_positions[:, 2:3],  # root body height
+            quaternion_to_tangent_and_normal(root_rotations),
+            root_linear_velocities,
+            root_angular_velocities,
+            (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
+        ),
+        dim=-1,
+    )
+    return obs
