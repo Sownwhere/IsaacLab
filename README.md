@@ -150,8 +150,10 @@ gdp@gdp:~/IsaacLab$ conda activate env_isaaclab
 
 --task  hexo
 
-(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task  hexo  --algorithm MAAMP
-
+(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task  hexo  --num_envs 4  --algorithm MAAMP
 
 --algorithm
 MAAMP
+
+
+
