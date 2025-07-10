@@ -364,7 +364,7 @@ class MAAMP(MultiAgentSuper):
             self._amp_value_preprocessor = self._amp_value_preprocessor(**self._amp_value_preprocessor_kwargs)
             self.checkpoint_modules["humanoid"]["value_preprocessor"] = self._amp_value_preprocessor
         else:
-            self._value_preprocessor = self._empty_preprocessor
+            self._amp_value_preprocessor = self._empty_preprocessor
 
         if self._amp_amp_state_preprocessor:
             self._amp_amp_state_preprocessor = self._amp_amp_state_preprocessor(**self._amp_amp_state_preprocessor_kwargs)
@@ -528,15 +528,21 @@ class MAAMP(MultiAgentSuper):
             # time-limit (truncation) bootstrapping
             if self._ppo_time_limit_bootstrap:
                 rewards["exo"] += self._ppo_discount_factor  * values["exo"] * truncated["exo"]
+
             if self._amp_time_limit_bootstrap:
-                rewards += self._amp_discount_factor * values["humanoid"] * truncated
+                rewards["humanoid"] += self._amp_discount_factor  * values["humanoid"] * truncated["humanoid"]
 
             # compute next values
             with torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
-                next_values, _, _ = self.values["humanoid"].act({"states": self._amp_state_preprocessor(next_states)}, role="value")
-                next_values = self._value_preprocessor(next_values, inverse=True)
+                print("next_states",next_states)
+                next_values, _, _ = self.values["humanoid"].act({"states": self._amp_state_preprocessor(next_states["humanoid"])}, role="value")
+                next_values= self._amp_value_preprocessor(next_states["humanoid"], inverse=True)
+                
+                for key in infos:
+                    print("infos key:", key)
+
                 if "terminate" in infos:
-                    next_values *= infos["terminate"].view(-1, 1).logical_not()  # compatibility with IsaacGymEnvs
+                    next_values*= infos["terminate"].view(-1, 1).logical_not()  # compatibility with IsaacGymEnvs
                 else:
                     next_values *= terminated["humanoid"].view(-1, 1).logical_not()
 
