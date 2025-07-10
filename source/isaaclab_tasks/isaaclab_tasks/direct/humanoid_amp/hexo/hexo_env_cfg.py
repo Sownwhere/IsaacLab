@@ -34,7 +34,8 @@ class HexoEnvCfg(DirectMARLEnvCfg):
     early_termination = True
     termination_height = 0.5
 
-    motion_file: str = MISSING
+    # motion_file: str = MISSING
+    motion_file: str = os.path.join(MOTIONS_DIR, "bw_walk_npy/bw.npz")
     reference_body = "base_link"
     reset_strategy = "random"
 

@@ -34,7 +34,7 @@ class Runner:
         self._models = self._generate_models(self._env, copy.deepcopy(self._cfg))
         self._agent = self._generate_agent(self._env, copy.deepcopy(self._cfg), self._models)
         print("***zhhw, Type of self._agent:", type(self._agent))  # 打印类型 <class 'skrl.multi_agents_super.torch.maamp.maamp.MAAMP'>
-        print("MAAMP attributes:", dir(self._agent))
+        print("self._agent attributes:", dir(self._agent))
         if hasattr(self._agent, "possible_agents"):  # 检查是否有多智能体成员
             print("Number of sub-agents:", len(self._agent.possible_agents))
             for i, agent in enumerate(self._agent.possible_agents):

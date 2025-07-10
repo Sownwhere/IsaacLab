@@ -468,12 +468,12 @@ class MAAMP(MultiAgentSuper):
             else: 
                 preprocessed_state = self._amp_state_preprocessor(states["humanoid"])
             output = self.policies["humanoid"].act({"states": preprocessed_state}, role="policy")
-            print("***output length:", len(output))  # 查看元组长度
+            print("***maamp.py: act output length:", len(output))  # 查看元组长度
             print("***dir output:", dir(output))  # 查看元组长度
-            print("***output[0]", output[0])  # 查看元组长度
-            print("***output[1]", output[1])  # 查看元组长度
-            print("***output[2]", output[2])  # 查看元组长度
-            print("***first element shape:", output[0].shape)  # 尝试访问第一个元素
+            print("***shape output[0]", output[0].shape)  # 查看元组长度
+            print("***shape output[1]", output[1].shape)  # 查看元组长度
+            print("***Keys in output[2]:", output[2].keys())  # 输出所有键
+            print("***Length of output[2]:", len(output[2]))  # 输出字典的键值对数量
 
             data.append(output)
             # print("self.possible_agents: ",self.possible_agents)
@@ -482,7 +482,9 @@ class MAAMP(MultiAgentSuper):
             outputs = {uid: d[2] for uid, d in zip(self.possible_agents, data)}
 
             self._current_log_prob = log_prob
-            # print("actions:", actions)
+            print("***keys in actions:", actions.keys())
+            print("***actions['exo'].shape: ",actions['exo'].shape)
+            print("***actions['humanoid'].shape: ",actions['humanoid'].shape)
         return actions, log_prob, outputs
 
     def record_transition(
@@ -507,7 +509,7 @@ class MAAMP(MultiAgentSuper):
         :type rewards: dictionary of torch.Tensor
         :param next_states: Next observations/states of the environment
         :type next_states: dictionary of torch.Tensor
-        :param terminated: Signals to indicate that episodes have terminated
+        :param terminated: Signals to indicate that episodes have terminated # 回合终止
         :type terminated: dictionary of torch.Tensor
         :param truncated: Signals to indicate that episodes have been truncated
         :type truncated: dictionary of torch.Tensor
@@ -524,6 +526,7 @@ class MAAMP(MultiAgentSuper):
 
         if self.memories:
             self._current_next_states = next_states
+            print("***infos for record_transition: ",infos.keys()) #dict_keys(['amp_obs', 'shared_states', 'shared_next_states'])
             amp_states = infos["amp_obs"]
             # print("amp_states.shape",amp_states.shape)
             values = {}
