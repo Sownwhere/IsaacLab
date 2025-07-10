@@ -108,8 +108,8 @@ algorithm = args_cli.algorithm.lower()
 agent_cfg_entry_point = "skrl_cfg_entry_point" if algorithm in ["ppo"] else f"skrl_{algorithm}_cfg_entry_point"
 
 
-@hydra_task_config(args_cli.task, agent_cfg_entry_point)
-def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
+@hydra_task_config(args_cli.task, agent_cfg_entry_point) #通过 Hydra 配置系统动态赋值, 
+def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):#env_cfg=args_cli.task; agent_cfg=agent_cfg_entry_point
     """Train with skrl agent."""
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
@@ -179,7 +179,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 
     # convert to single-agent instance if required by the RL algorithm
-    if isinstance(env.unwrapped, DirectMARLEnv) and algorithm in ["ppo"]:
+    if isinstance(env.unwrapped, DirectMARLEnv) and algorithm in ["ppo"]: #继承了多智能体的类，算法为ppo，转化为单智能体
         env = multi_agent_to_single_agent(env)
 
     # wrap for video recording
@@ -194,7 +194,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print_dict(video_kwargs, nesting=4)
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
-    # wrap around environment for skrl
+    # wrap around environment for skrl; 将gym的evn wrap成skrl库格式
     env = SkrlVecEnvWrapper(env, ml_framework=args_cli.ml_framework)  # same as: `wrap_env(env, wrapper="auto")`
     # ✅ monkey patch 解决 collect_reference_motions 缺失问题
     if hasattr(env, "env") and hasattr(env.env, "collect_reference_motions"):
@@ -204,8 +204,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # configure and instantiate the skrl runner
     # https://skrl.readthedocs.io/en/latest/api/utils/runner.html
-
-    # print(f"[INFO] Running training mode...  {agent_cfg}")
+    print("Loaded yam file, agent_cfg: ",agent_cfg)
     runner = Runner(env, agent_cfg)
 
     # load checkpoint (if specified)

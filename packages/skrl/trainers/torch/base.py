@@ -112,7 +112,9 @@ class Trainer:
         :raises ValueError: Invalid setup
         """
         # validate agents and their scopes
+        print("***type(self.agents)",type(self.agents))
         if type(self.agents) in [tuple, list]:
+            print("enter if type(self.agents)",type(self.agents))
             # single agent
             if len(self.agents) == 1:
                 self.num_simultaneous_agents = 1
@@ -148,6 +150,7 @@ class Trainer:
                 raise ValueError("A list of agents is expected")
         else:
             self.num_simultaneous_agents = 1
+        print("*** base_self.num_simultaneous_agents",self.num_simultaneous_agents)
 
     def train(self) -> None:
         """Train the agents
@@ -303,13 +306,13 @@ class Trainer:
 
         This method executes the following steps in loop:
 
-        - Pre-interaction
-        - Compute actions
-        - Interact with the environments
-        - Render scene
-        - Record transitions
-        - Post-interaction
-        - Reset environments
+        - Pre-interaction  重置环境状态（调用 env.reset()），更新超参数（如学习率、探索率 ε），模型和数据移动到目标设备
+        - Compute actions  状态预处理;策略推理;动作后处理，将动作映射到环境允许的范围
+        - Interact with the environments  执行动作,调用 env.step(action)
+        - Render scene  渲染场景,调用渲染接口,记录视频
+        - Record transitions  将交互数据(状态、动作、奖励等)存入经验回放池(Replay Buffer)，供后续训练使用
+        - Post-interaction  状态更新,将 next_state 赋值给 state,为下一次交互做准备。终止处理,如果 done=True,调用 env.reset() 开始新 episode。统计信息,记录累计奖励、步数等指标。
+        - Reset environments  重置环境,在episode重新开始时,恢复环境,重置内部变量
         """
         assert self.num_simultaneous_agents == 1, "This method is not allowed for simultaneous agents"
         assert self.env.num_agents > 1, "This method is not allowed for single-agent"
