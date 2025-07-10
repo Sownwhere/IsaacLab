@@ -15,6 +15,7 @@ from skrl.multi_agents_super.torch import MultiAgentSuper
 from skrl.memories.torch import Memory
 from skrl.models.torch import Model
 from skrl.resources.schedulers.torch import KLAdaptiveLR
+from collections import defaultdict
 
 MAAMP_DEFAULT_CONFIG = {
 
@@ -315,9 +316,7 @@ class MAAMP(MultiAgentSuper):
                 self.schedulers["exo"] = self._ppo_learning_rate_scheduler(
                     optimizer, **self._ppo_learning_rate_scheduler_kwargs
                 )
-        self.checkpoint_modules["exo"]["optimizer"] = self.optimizers[uid]
-    
-        self.checkpoint_modules["humanoid"]["discriminator"] =  self.discriminator["humanoid"]
+        self.checkpoint_modules["exo"]["optimizer"] = self.optimizers["exo"]
 
 
         # # set up automatic mixed precision
@@ -329,16 +328,17 @@ class MAAMP(MultiAgentSuper):
 
         # set up optimizer and learning rate scheduler
         if self.policies["humanoid"] is not None and self.values["humanoid"] is not None and self.discriminator["humanoid"] is not None:
-            self.optimizer = torch.optim.Adam(
+            optimizer = torch.optim.Adam(
                 itertools.chain(self.policies["humanoid"].parameters(),self.values["humanoid"].parameters(), self.discriminator["humanoid"].parameters()),
                 lr=self._amp_learning_rate,
             )
+            self.optimizers["humanoid"] = optimizer
             if self._amp_learning_rate_scheduler is not None:
                 self.scheduler = self._amp_learning_rate_scheduler(
-                    self.optimizer, **self.cfg["learning_rate_scheduler_kwargs"]
+                    optimizer, **self.cfg["learning_rate_scheduler_kwargs"]
                 )
 
-            self.checkpoint_modules["humanoid"]["optimizer"] = self.optimizer
+            self.checkpoint_modules["humanoid"]["optimizer"] = optimizer
 
         # set up preprocessors
 
@@ -453,107 +453,128 @@ class MAAMP(MultiAgentSuper):
             output = self.policies["humanoid"].act({"states": preprocessed_state}, role="policy")
 
             data.append(output)
-
+            print("self.possible_agents: ",self.possible_agents)
             actions = {uid: d[0] for uid, d in zip(self.possible_agents, data)}
             log_prob = {uid: d[1] for uid, d in zip(self.possible_agents, data)}
             outputs = {uid: d[2] for uid, d in zip(self.possible_agents, data)}
 
             self._current_log_prob = log_prob
-
-            # self._current_log_prob = log_prob
+            print("actions:", actions)
         return actions, log_prob, outputs
 
-#     def record_transition(
-#         self,
-#         states: torch.Tensor,
-#         actions: torch.Tensor,
-#         rewards: torch.Tensor,
-#         next_states: torch.Tensor,
-#         terminated: torch.Tensor,
-#         truncated: torch.Tensor,
-#         infos: Any,
-#         timestep: int,
-#         timesteps: int,
-#     ) -> None:
-#         """Record an environment transition in memory
+    def record_transition(
+        self,
+        states: Mapping[str, torch.Tensor],
+        actions: Mapping[str, torch.Tensor],
+        rewards: Mapping[str, torch.Tensor],
+        next_states: Mapping[str, torch.Tensor],
+        terminated: Mapping[str, torch.Tensor],
+        truncated: Mapping[str, torch.Tensor],
+        infos: Mapping[str, Any],
+        timestep: int,
+        timesteps: int,
+    ) -> None:
+        """Record an environment transition in memory
 
-#         :param states: Observations/states of the environment used to make the decision
-#         :type states: torch.Tensor
-#         :param actions: Actions taken by the agent
-#         :type actions: torch.Tensor
-#         :param rewards: Instant rewards achieved by the current actions
-#         :type rewards: torch.Tensor
-#         :param next_states: Next observations/states of the environment
-#         :type next_states: torch.Tensor
-#         :param terminated: Signals to indicate that episodes have terminated
-#         :type terminated: torch.Tensor
-#         :param truncated: Signals to indicate that episodes have been truncated
-#         :type truncated: torch.Tensor
-#         :param infos: Additional information about the environment
-#         :type infos: Any type supported by the environment
-#         :param timestep: Current timestep
-#         :type timestep: int
-#         :param timesteps: Number of timesteps
-#         :type timesteps: int
-#         """
-#         # use collected states
-#         if self._current_states is not None:
-#             states = self._current_states
+        :param states: Observations/states of the environment used to make the decision
+        :type states: dictionary of torch.Tensor
+        :param actions: Actions taken by the agent
+        :type actions: dictionary of torch.Tensor
+        :param rewards: Instant rewards achieved by the current actions
+        :type rewards: dictionary of torch.Tensor
+        :param next_states: Next observations/states of the environment
+        :type next_states: dictionary of torch.Tensor
+        :param terminated: Signals to indicate that episodes have terminated
+        :type terminated: dictionary of torch.Tensor
+        :param truncated: Signals to indicate that episodes have been truncated
+        :type truncated: dictionary of torch.Tensor
+        :param infos: Additional information about the environment
+        :type infos: dictionary of any supported type
+        :param timestep: Current timestep
+        :type timestep: int
+        :param timesteps: Number of timesteps
+        :type timesteps: int
+        """
+        super().record_transition(
+            states, actions, rewards, next_states, terminated, truncated, infos, timestep, timesteps
+        )
 
-#         super().record_transition(
-#             states, actions, rewards, next_states, terminated, truncated, infos, timestep, timesteps
-#         )
+        if self.memories:
+            self._current_next_states = next_states
+            print(infos)
+            amp_states = infos["amp_obs"]
+            values = {}
+            # reward shaping
+            if self._ppo_rewards_shaper is not None:
+                rewards["exo"] = self._ppo_rewards_shaper(rewards["exo"], timestep, timesteps)
 
-#         if self.memory is not None:
-#             amp_states = infos["amp_obs"]
+            if self._amp_rewards_shaper is not None:
+                rewards["humanoid"] = self._amp_rewards_shaper(rewards["humanoid"], timestep, timesteps)
 
-#             # reward shaping
-#             if self._rewards_shaper is not None:
-#                 rewards = self._rewards_shaper(rewards, timestep, timesteps)
+            # compute values
+            with torch.autocast(device_type=self._device_type, enabled=self._ppo_mixed_precision):
+                
+                values["exo"], _, _ = self.values["exo"].act(
+                    {"states": self._ppo_state_preprocessor(states["exo"])}, role="value"
+                )
+                values["exo"] = self._ppo_value_preprocessor(values["exo"], inverse=True)
 
-#             # compute values
-#             with torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
-#                 values, _, _ = self.value.act({"states": self._state_preprocessor(states)}, role="value")
-#                 values = self._value_preprocessor(values, inverse=True)
+            with torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
+                values["humanoid"], _, _ = self.values["humanoid"].act(
+                    {"states": self._amp_state_preprocessor(states["humanoid"])}, role="value"
+                )
+                values["humanoid"] = self._amp_value_preprocessor(values["humanoid"], inverse=True)
 
-#             # time-limit (truncation) bootstrapping
-#             if self._time_limit_bootstrap:
-#                 rewards += self._discount_factor * values * truncated
+            # time-limit (truncation) bootstrapping
+            if self._ppo_time_limit_bootstrap:
+                rewards["exo"] += self._ppo_discount_factor  * values["exo"] * truncated["exo"]
+            if self._amp_time_limit_bootstrap:
+                rewards += self._amp_discount_factor * values["humanoid"] * truncated
 
-#             # compute next values
-#             with torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
-#                 next_values, _, _ = self.value.act({"states": self._state_preprocessor(next_states)}, role="value")
-#                 next_values = self._value_preprocessor(next_values, inverse=True)
-#                 if "terminate" in infos:
-#                     next_values *= infos["terminate"].view(-1, 1).logical_not()  # compatibility with IsaacGymEnvs
-#                 else:
-#                     next_values *= terminated.view(-1, 1).logical_not()
+            # compute next values
+            with torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
+                next_values, _, _ = self.values["humanoid"].act({"states": self._amp_state_preprocessor(next_states)}, role="value")
+                next_values = self._value_preprocessor(next_values, inverse=True)
+                if "terminate" in infos:
+                    next_values *= infos["terminate"].view(-1, 1).logical_not()  # compatibility with IsaacGymEnvs
+                else:
+                    next_values *= terminated["humanoid"].view(-1, 1).logical_not()
 
-#             self.memory.add_samples(
-#                 states=states,
-#                 actions=actions,
-#                 rewards=rewards,
-#                 next_states=next_states,
-#                 terminated=terminated,
-#                 truncated=truncated,
-#                 log_prob=self._current_log_prob,
-#                 values=values,
-#                 amp_states=amp_states,
-#                 next_values=next_values,
-#             )
-#             for memory in self.secondary_memories:
-#                 memory.add_samples(
-#                     states=states,
-#                     actions=actions,
-#                     rewards=rewards,
-#                     next_states=next_states,
-#                     terminated=terminated,
-#                     truncated=truncated,
-#                     log_prob=self._current_log_prob,
-#                     values=values,
-#                     amp_states=amp_states,
-#                     next_values=next_values,
-#                 )
+            for uid in self.possible_agents:
+            # storage transition in memory
+                self.memories[uid].add_samples(
+                    states=states[uid],
+                    actions=actions[uid],
+                    rewards=rewards[uid],
+                    next_states=next_states[uid],
+                    terminated=terminated[uid],
+                    truncated=truncated[uid],
+                    log_prob=self._current_log_prob[uid],
+                    values=values[uid],
+                )
+
+            self.memories["humanoid"].add_samples(
+                amp_states=amp_states,
+                next_values=next_values,
+            )
+
+            for memory in self.secondary_memories:
+                memory.add_samples(
+                    states=states["humanoid"],
+                    actions=actions["humanoid"],
+                    rewards=rewards["humanoid"],
+                    next_states=next_states["humanoid"],
+                    terminated=terminated["humanoid"],
+                    truncated=truncated["humanoid"],
+                    log_prob=self._current_log_prob["humanoid"],
+                    values=values["humanoid"],
+                    amp_states=amp_states,
+                    next_values=next_values,
+                )
+            print(f"target_values")
+
+        
+
 
 #     def pre_interaction(self, timestep: int, timesteps: int) -> None:
 #         """Callback called before the interaction with the environment
