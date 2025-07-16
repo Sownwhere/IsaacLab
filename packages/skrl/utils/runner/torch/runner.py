@@ -478,10 +478,6 @@ class Runner:
             reply_buffer = self._component(reply_buffer_class)(
                 device=device, **self._process_cfg(cfg.get("reply_buffer", {}))
             )
-
-
-
-
  
 
         agent_kwargs = {
@@ -489,6 +485,7 @@ class Runner:
             "memories": memories,
             "observation_spaces": observation_spaces,
             "action_spaces": action_spaces,
+            "amp_observation_space": amp_observation_space,
             "possible_agents": possible_agents,
             "motion_dataset": motion_dataset,
             "reply_buffer": reply_buffer,
