@@ -615,22 +615,22 @@ class MAAMP(MultiAgentSuper):
         if self.collect_observation is not None:
             self._current_states = self.collect_observation()
 
-#     def post_interaction(self, timestep: int, timesteps: int) -> None:
-#         """Callback called after the interaction with the environment
+    def post_interaction(self, timestep: int, timesteps: int) -> None:
+        """Callback called after the interaction with the environment
 
-#         :param timestep: Current timestep
-#         :type timestep: int
-#         :param timesteps: Number of timesteps
-#         :type timesteps: int
-#         """
-#         self._rollout += 1
-#         if not self._rollout % self._rollouts and timestep >= self._learning_starts:
-#             self.set_mode("train")
-#             self._update(timestep, timesteps)
-#             self.set_mode("eval")
+        :param timestep: Current timestep
+        :type timestep: int
+        :param timesteps: Number of timesteps
+        :type timesteps: int
+        """
+        self._amp_rollout += 1
+        if not self._amp_rollout % self._amp_rollouts and timestep >= self._amp_learning_starts:
+            self.set_mode("train")
+            self._update(timestep, timesteps)
+            self.set_mode("eval")
 
-#         # write tracking data and checkpoints
-#         super().post_interaction(timestep, timesteps)
+        # write tracking data and checkpoints
+        super().post_interaction(timestep, timesteps)
 
 #     def _update(self, timestep: int, timesteps: int) -> None:
 #         """Algorithm's main update step
