@@ -604,16 +604,16 @@ class MAAMP(MultiAgentSuper):
         
 
 
-#     def pre_interaction(self, timestep: int, timesteps: int) -> None:
-#         """Callback called before the interaction with the environment
+    def pre_interaction(self, timestep: int, timesteps: int) -> None:
+        """Callback called before the interaction with the environment
 
-#         :param timestep: Current timestep
-#         :type timestep: int
-#         :param timesteps: Number of timesteps
-#         :type timesteps: int
-#         """
-#         if self.collect_observation is not None:
-#             self._current_states = self.collect_observation()
+        :param timestep: Current timestep
+        :type timestep: int
+        :param timesteps: Number of timesteps
+        :type timesteps: int
+        """
+        if self.collect_observation is not None:
+            self._current_states = self.collect_observation()
 
 #     def post_interaction(self, timestep: int, timesteps: int) -> None:
 #         """Callback called after the interaction with the environment
