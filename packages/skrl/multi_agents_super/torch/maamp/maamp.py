@@ -691,47 +691,47 @@ class MAAMP(MultiAgentSuper):
         self.motion_dataset.add_samples(states=self.collect_reference_motions(self._amp_batch_size))
 
         # compute combined rewards
-        rewards = self.memory.get_tensor_by_name("rewards")
-        amp_states = self.memory.get_tensor_by_name("amp_states")
+        rewards = self.memories.get_tensor_by_name("rewards")
+        amp_states = self.memories.get_tensor_by_name("amp_states")
 
-        with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
+        with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
             amp_logits, _, _ = self.discriminator.act(
                 {"states": self._amp_state_preprocessor(amp_states)}, role="discriminator"
             )
             style_reward = -torch.log(
                 torch.maximum(1 - 1 / (1 + torch.exp(-amp_logits)), torch.tensor(0.0001, device=self.device))
             )
-            style_reward *= self._discriminator_reward_scale
+            style_reward *= self._amp_discriminator_reward_scale
             style_reward = style_reward.view(rewards.shape)
 
-        combined_rewards = self._task_reward_weight * rewards + self._style_reward_weight * style_reward
+        combined_rewards = self._amp_task_reward_weight * rewards + self._amp_style_reward_weight * style_reward
 
         # compute returns and advantages
-        values = self.memory.get_tensor_by_name("values")
-        next_values = self.memory.get_tensor_by_name("next_values")
+        values = self.memories.get_tensor_by_name("values")
+        next_values = self.memories.get_tensor_by_name("next_values")
         returns, advantages = compute_gae(
             rewards=combined_rewards,
-            dones=self.memory.get_tensor_by_name("terminated") | self.memory.get_tensor_by_name("truncated"),
+            dones=self.memories.get_tensor_by_name("terminated") | self.memories.get_tensor_by_name("truncated"),
             values=values,
             next_values=next_values,
             discount_factor=self._discount_factor,
             lambda_coefficient=self._lambda,
         )
 
-        self.memory.set_tensor_by_name("values", self._value_preprocessor(values, train=True))
-        self.memory.set_tensor_by_name("returns", self._value_preprocessor(returns, train=True))
-        self.memory.set_tensor_by_name("advantages", advantages)
+        self.memories.set_tensor_by_name("values", self._value_preprocessor(values, train=True))
+        self.memories.set_tensor_by_name("returns", self._value_preprocessor(returns, train=True))
+        self.memories.set_tensor_by_name("advantages", advantages)
 
-        # sample mini-batches from memory
-        sampled_batches = self.memory.sample_all(names=self.tensors_names, mini_batches=self._mini_batches)
+        # sample mini-batches from memories
+        sampled_batches = self.memories.sample_all(names=self.tensors_names, mini_batches=self._mini_batches)
         sampled_motion_batches = self.motion_dataset.sample(
-            names=["states"], batch_size=self.memory.memory_size * self.memory.num_envs, mini_batches=self._mini_batches
+            names=["states"], batch_size=self.memories.memory_size * self.memories.num_envs, mini_batches=self._mini_batches
         )
         if len(self.reply_buffer):
             sampled_replay_batches = self.reply_buffer.sample(
                 names=["states"],
-                batch_size=self.memory.memory_size * self.memory.num_envs,
-                mini_batches=self._mini_batches,
+                batch_size=self.memories.memory_size * self.memories.num_envs,
+                mini_batches=self._amp_mini_batches,
             )
         else:
             sampled_replay_batches = [[batches[self.tensors_names.index("amp_states")]] for batches in sampled_batches]
@@ -742,7 +742,7 @@ class MAAMP(MultiAgentSuper):
         cumulative_discriminator_loss = 0
 
         # learning epochs
-        for epoch in range(self._learning_epochs):
+        for epoch in range(self._amp_learning_epochs):
             kl_divergences = []
 
             # mini-batches loop
@@ -760,9 +760,9 @@ class MAAMP(MultiAgentSuper):
                 _,
             ) in enumerate(sampled_batches):
 
-                with torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
+                with torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
 
-                    sampled_states = self._state_preprocessor(sampled_states, train=True)
+                    sampled_states = self._amp_state_preprocessor(sampled_states, train=True)
 
                     _, next_log_prob, _ = self.policy.act(
                         {"states": sampled_states, "taken_actions": sampled_actions}, role="policy"
@@ -775,8 +775,8 @@ class MAAMP(MultiAgentSuper):
                         kl_divergences.append(kl_divergence)
 
                     # compute entropy loss
-                    if self._entropy_loss_scale:
-                        entropy_loss = -self._entropy_loss_scale * self.policy.get_entropy(role="policy").mean()
+                    if self._amp_entropy_loss_scale:
+                        entropy_loss = -self._amp_entropy_loss_scale * self.policy.get_entropy(role="policy").mean()
                     else:
                         entropy_loss = 0
 
@@ -784,7 +784,7 @@ class MAAMP(MultiAgentSuper):
                     ratio = torch.exp(next_log_prob - sampled_log_prob)
                     surrogate = sampled_advantages * ratio
                     surrogate_clipped = sampled_advantages * torch.clip(
-                        ratio, 1.0 - self._ratio_clip, 1.0 + self._ratio_clip
+                        ratio, 1.0 - self._amp_ratio_clip, 1.0 + self._amp_ratio_clip
                     )
 
                     policy_loss = -torch.min(surrogate, surrogate_clipped).mean()
@@ -792,22 +792,22 @@ class MAAMP(MultiAgentSuper):
                     # compute value loss
                     predicted_values, _, _ = self.value.act({"states": sampled_states}, role="value")
 
-                    if self._clip_predicted_values:
+                    if self._amp_clip_predicted_values:
                         predicted_values = sampled_values + torch.clip(
-                            predicted_values - sampled_values, min=-self._value_clip, max=self._value_clip
+                            predicted_values - sampled_values, min=-self._amp_value_clip, max=self._amp_value_clip
                         )
-                    value_loss = self._value_loss_scale * F.mse_loss(sampled_returns, predicted_values)
+                    value_loss = self._amp_value_loss_scale * F.mse_loss(sampled_returns, predicted_values)
 
                     # compute discriminator loss
-                    if self._discriminator_batch_size:
+                    if self._amp_discriminator_batch_size:
                         sampled_amp_states = self._amp_state_preprocessor(
-                            sampled_amp_states[0 : self._discriminator_batch_size], train=True
+                            sampled_amp_states[0 : self._amp_discriminator_batch_size], train=True
                         )
                         sampled_amp_replay_states = self._amp_state_preprocessor(
-                            sampled_replay_batches[batch_index][0][0 : self._discriminator_batch_size], train=True
+                            sampled_replay_batches[batch_index][0][0 : self._amp_discriminator_batch_size], train=True
                         )
                         sampled_amp_motion_states = self._amp_state_preprocessor(
-                            sampled_motion_batches[batch_index][0][0 : self._discriminator_batch_size], train=True
+                            sampled_motion_batches[batch_index][0][0 : self._amp_discriminator_batch_size], train=True
                         )
                     else:
                         sampled_amp_states = self._amp_state_preprocessor(sampled_amp_states, train=True)
@@ -836,14 +836,14 @@ class MAAMP(MultiAgentSuper):
                     )
 
                     # discriminator logit regularization
-                    if self._discriminator_logit_regularization_scale:
+                    if self._amp_discriminator_logit_regularization_scale:
                         logit_weights = torch.flatten(list(self.discriminator.modules())[-1].weight)
-                        discriminator_loss += self._discriminator_logit_regularization_scale * torch.sum(
+                        discriminator_loss += self._amp_discriminator_logit_regularization_scale * torch.sum(
                             torch.square(logit_weights)
                         )
 
                     # discriminator gradient penalty
-                    if self._discriminator_gradient_penalty_scale:
+                    if self._amp_discriminator_gradient_penalty_scale:
                         amp_motion_gradient = torch.autograd.grad(
                             amp_motion_logits,
                             sampled_amp_motion_states,
@@ -853,19 +853,19 @@ class MAAMP(MultiAgentSuper):
                             only_inputs=True,
                         )
                         gradient_penalty = torch.sum(torch.square(amp_motion_gradient[0]), dim=-1).mean()
-                        discriminator_loss += self._discriminator_gradient_penalty_scale * gradient_penalty
+                        discriminator_loss += self._amp_discriminator_gradient_penalty_scale * gradient_penalty
 
                     # discriminator weight decay
-                    if self._discriminator_weight_decay_scale:
+                    if self._amp_discriminator_weight_decay_scale:
                         weights = [
                             torch.flatten(module.weight)
                             for module in self.discriminator.modules()
                             if isinstance(module, torch.nn.Linear)
                         ]
                         weight_decay = torch.sum(torch.square(torch.cat(weights, dim=-1)))
-                        discriminator_loss += self._discriminator_weight_decay_scale * weight_decay
+                        discriminator_loss += self._amp_discriminator_weight_decay_scale * weight_decay
 
-                    discriminator_loss *= self._discriminator_loss_scale
+                    discriminator_loss *= self._amp_discriminator_loss_scale
 
                 # optimization step
                 self.optimizer.zero_grad()
@@ -876,13 +876,13 @@ class MAAMP(MultiAgentSuper):
                     self.value.reduce_parameters()
                     self.discriminator.reduce_parameters()
 
-                if self._grad_norm_clip > 0:
+                if self._amp_grad_norm_clip > 0:
                     self.scaler.unscale_(self.optimizer)
                     nn.utils.clip_grad_norm_(
                         itertools.chain(
                             self.policy.parameters(), self.value.parameters(), self.discriminator.parameters()
                         ),
-                        self._grad_norm_clip,
+                        self._amp_grad_norm_clip,
                     )
 
                 self.scaler.step(self.optimizer)
@@ -891,12 +891,12 @@ class MAAMP(MultiAgentSuper):
                 # update cumulative losses
                 cumulative_policy_loss += policy_loss.item()
                 cumulative_value_loss += value_loss.item()
-                if self._entropy_loss_scale:
+                if self._amp_entropy_loss_scale:
                     cumulative_entropy_loss += entropy_loss.item()
                 cumulative_discriminator_loss += discriminator_loss.item()
 
             # update learning rate
-            if self._learning_rate_scheduler:
+            if self._amp_learning_rate_scheduler:
                 if isinstance(self.scheduler, KLAdaptiveLR):
                     kl = torch.tensor(kl_divergences, device=self.device).mean()
                     # reduce (collect from all workers/processes) KL in distributed runs
@@ -911,17 +911,17 @@ class MAAMP(MultiAgentSuper):
         self.reply_buffer.add_samples(states=amp_states.view(-1, amp_states.shape[-1]))
 
         # record data
-        self.track_data("Loss / Policy loss", cumulative_policy_loss / (self._learning_epochs * self._mini_batches))
-        self.track_data("Loss / Value loss", cumulative_value_loss / (self._learning_epochs * self._mini_batches))
-        if self._entropy_loss_scale:
+        self.track_data("Loss / Policy loss", cumulative_policy_loss / (self._amp_learning_epochs * self._amp_mini_batches))
+        self.track_data("Loss / Value loss", cumulative_value_loss / (self._amp_learning_epochs * self._amp_mini_batches))
+        if self._amp_entropy_loss_scale:
             self.track_data(
-                "Loss / Entropy loss", cumulative_entropy_loss / (self._learning_epochs * self._mini_batches)
+                "Loss / Entropy loss", cumulative_entropy_loss / (self._amp_learning_epochs * self._amp_mini_batches)
             )
         self.track_data(
-            "Loss / Discriminator loss", cumulative_discriminator_loss / (self._learning_epochs * self._mini_batches)
+            "Loss / Discriminator loss", cumulative_discriminator_loss / (self._amp_learning_epochs * self._amp_mini_batches)
         )
 
         self.track_data("Policy / Standard deviation", self.policy.distribution(role="policy").stddev.mean().item())
 
-        if self._learning_rate_scheduler:
+        if self._amp_learning_rate_scheduler:
             self.track_data("Learning / Learning rate", self.scheduler.get_last_lr()[0])
