@@ -74,6 +74,7 @@ class MultiAgentSuper:
         self.models = models
         self.memories = memories
         self.observation_spaces = observation_spaces
+        print("MultiAgentSuper observation_spaces",observation_spaces)
         self.action_spaces = action_spaces
         self.cfg = cfg if cfg is not None else {}
 

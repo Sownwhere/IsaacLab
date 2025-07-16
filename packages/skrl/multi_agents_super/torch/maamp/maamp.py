@@ -135,6 +135,7 @@ class MAAMP(MultiAgentSuper):
         models: Mapping[str, Model],
         memories: Optional[Mapping[str, Memory]] = None,
         observation_spaces: Optional[Union[Mapping[str, int], Mapping[str, gymnasium.Space]]] = None,
+        amp_observation_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
         action_spaces: Optional[Union[Mapping[str, int], Mapping[str, gymnasium.Space]]] = None,
         device: Optional[Union[str, torch.device]] = None,
         cfg: Optional[dict] = None,
@@ -276,7 +277,8 @@ class MAAMP(MultiAgentSuper):
         self._amp_mixed_precision = self.cfg["AMP"]["mixed_precision"]
 
         if observation_spaces is not None:
-            self.amp_observation_space = observation_spaces['humanoid']
+            print("amp_observation_space",amp_observation_space)
+            self.amp_observation_space = amp_observation_space
         else:
             print("observation is None!")
         self.motion_dataset = motion_dataset
@@ -378,7 +380,7 @@ class MAAMP(MultiAgentSuper):
         """Initialize the agent"""
         super().init(trainer_cfg=trainer_cfg)
         self.set_mode("eval")
-
+        print("self.amp_observation_space",self.amp_observation_space)
         # create tensors in memories
         if self.memories:
             for uid in self.possible_agents:
@@ -501,8 +503,8 @@ class MAAMP(MultiAgentSuper):
 
         if self.memories:
             self._current_next_states = next_states
-            print(infos)
             amp_states = infos["amp_obs"]
+            print("amp_states.shape",amp_states.shape)
             values = {}
             # reward shaping
             if self._ppo_rewards_shaper is not None:
@@ -534,35 +536,52 @@ class MAAMP(MultiAgentSuper):
 
             # compute next values
             with torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
-                print("next_states",next_states)
                 next_values, _, _ = self.values["humanoid"].act({"states": self._amp_state_preprocessor(next_states["humanoid"])}, role="value")
                 next_values= self._amp_value_preprocessor(next_states["humanoid"], inverse=True)
-                
-                for key in infos:
-                    print("infos key:", key)
+
 
                 if "terminate" in infos:
                     next_values*= infos["terminate"].view(-1, 1).logical_not()  # compatibility with IsaacGymEnvs
                 else:
                     next_values *= terminated["humanoid"].view(-1, 1).logical_not()
 
-            for uid in self.possible_agents:
+
             # storage transition in memory
-                self.memories[uid].add_samples(
-                    states=states[uid],
-                    actions=actions[uid],
-                    rewards=rewards[uid],
-                    next_states=next_states[uid],
-                    terminated=terminated[uid],
-                    truncated=truncated[uid],
-                    log_prob=self._current_log_prob[uid],
-                    values=values[uid],
-                )
+            self.memories["exo"].add_samples(
+                states=states["exo"],
+                actions=actions["exo"],
+                rewards=rewards["exo"],
+                next_states=next_states["exo"],
+                terminated=terminated["exo"],
+                truncated=truncated["exo"],
+                log_prob=self._current_log_prob["exo"],
+                values=values["exo"],
+            )
+
+            print("states:", states["humanoid"].shape)
+            print("actions:", actions["humanoid"].shape)
+            print("rewards:", rewards["humanoid"].shape)
+            print("next_states:", next_states["humanoid"].shape)
+            print("terminated:", terminated["humanoid"].shape)
+            print("truncated:", truncated["humanoid"].shape)
+            print("log_prob:", self._current_log_prob["humanoid"].shape)
+            print("values:", values["humanoid"].shape)
+            print("amp_states:", amp_states.shape)
+            print("next_values:", next_values.shape)
 
             self.memories["humanoid"].add_samples(
+                states=states["humanoid"],
+                actions=actions["humanoid"],
+                rewards=rewards["humanoid"],
+                next_states=next_states["humanoid"],
+                terminated=terminated["humanoid"],
+                truncated=truncated["humanoid"],
+                log_prob=self._current_log_prob["humanoid"],
+                values=values["humanoid"],
                 amp_states=amp_states,
                 next_values=next_values,
             )
+
 
             for memory in self.secondary_memories:
                 memory.add_samples(

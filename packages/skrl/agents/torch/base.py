@@ -46,6 +46,7 @@ class Agent:
         """
         self.models = models
         self.observation_space = observation_space
+        print("Agent observation_space",observation_space)
         self.action_space = action_space
         self.cfg = cfg if cfg is not None else {}
 
