@@ -144,6 +144,9 @@ class MultiAgent:
             elif set(_input) >= set(self.possible_agents):
                 return _input
         return {name: copy.deepcopy(_input) for name in self.possible_agents}
+    
+    # def _as_dick(self, _input: Any) -> Any:
+    #     print("_as_dick " ,input)
 
     def _empty_preprocessor(self, _input: Any, *args, **kwargs) -> Any:
         """Empty preprocess method

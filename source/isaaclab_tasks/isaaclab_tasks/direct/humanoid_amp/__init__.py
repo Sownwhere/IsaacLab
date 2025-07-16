@@ -77,7 +77,7 @@ gym.register(
     entry_point=f"{__name__}.hexo.hexo_env:HexoEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.hexo.hexo_env_cfg:HexoEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.hexo.hexo_env_cfg:HexoWalkEnvCfg",
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
         "skrl_ippo_cfg_entry_point": f"{agents.__name__}:skrl_ippo_cfg.yaml",
