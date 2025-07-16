@@ -277,7 +277,7 @@ class MAAMP(MultiAgentSuper):
         self._amp_mixed_precision = self.cfg["AMP"]["mixed_precision"]
 
         if observation_spaces is not None:
-            print("amp_observation_space",amp_observation_space)
+            print("MAAMP observation_space",amp_observation_space)
             self.amp_observation_space = amp_observation_space
         else:
             print("observation is None!")
@@ -461,7 +461,7 @@ class MAAMP(MultiAgentSuper):
             outputs = {uid: d[2] for uid, d in zip(self.possible_agents, data)}
 
             self._current_log_prob = log_prob
-            print("actions:", actions)
+            # print("actions:", actions)
         return actions, log_prob, outputs
 
     def record_transition(
@@ -537,7 +537,9 @@ class MAAMP(MultiAgentSuper):
             # compute next values
             with torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
                 next_values, _, _ = self.values["humanoid"].act({"states": self._amp_state_preprocessor(next_states["humanoid"])}, role="value")
-                next_values= self._amp_value_preprocessor(next_states["humanoid"], inverse=True)
+                next_values= self._amp_value_preprocessor(next_values, inverse=True)
+
+                
 
 
                 if "terminate" in infos:
@@ -558,6 +560,7 @@ class MAAMP(MultiAgentSuper):
                 values=values["exo"],
             )
 
+            print("-----------infos ----------- ")
             print("states:", states["humanoid"].shape)
             print("actions:", actions["humanoid"].shape)
             print("rewards:", rewards["humanoid"].shape)
