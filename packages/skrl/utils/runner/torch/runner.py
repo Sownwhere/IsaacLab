@@ -684,7 +684,6 @@ class Runner:
             logger.warning("No 'class' field defined in 'trainer' cfg. 'SequentialTrainer' will be used as default")
         # instantiate trainer
 
-        print("trainer_class"*10)
         return trainer_class(env=env, agents=agent, cfg=cfg["trainer"])
 
     def run(self, mode: str = "train") -> None:
@@ -694,7 +693,6 @@ class Runner:
 
         :raises ValueError: The specified running mode is not valid
         """
-        print("run"*10)
         if mode == "train":
             self._trainer.train()
         elif mode == "eval":
