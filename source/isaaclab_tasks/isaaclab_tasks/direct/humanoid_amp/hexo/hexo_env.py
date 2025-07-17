@@ -189,6 +189,40 @@ class HexoEnv(DirectMARLEnv):
         self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
 
+    def _reset_strategy_random(
+        self, env_ids: torch.Tensor, start: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # sample random motion times (or zeros if start is True)
+        num_samples = env_ids.shape[0]
+        times = np.zeros(num_samples) if start else self._motion_loader.sample_times(num_samples)
+        # sample random motions
+        (
+            dof_positions,
+            dof_velocities,
+            body_positions,
+            body_rotations,
+            body_linear_velocities,
+            body_angular_velocities,
+        ) = self._motion_loader.sample(num_samples=num_samples, times=times)
+
+        # get root transforms (the humanoid torso)
+        motion_torso_index = self._motion_loader.get_body_index(["base_link"])[0]
+        root_state = self.robot.data.default_root_state[env_ids].clone()
+        root_state[:, 0:3] = body_positions[:, motion_torso_index] + self.scene.env_origins[env_ids]
+        root_state[:, 2] += 0.05  # lift the humanoid slightly to avoid collisions with the ground
+        root_state[:, 3:7] = body_rotations[:, motion_torso_index]
+        root_state[:, 7:10] = body_linear_velocities[:, motion_torso_index]
+        root_state[:, 10:13] = body_angular_velocities[:, motion_torso_index]
+        # get DOFs state
+        dof_pos = dof_positions[:, self.motion_dof_indexes]
+        dof_vel = dof_velocities[:, self.motion_dof_indexes]
+
+        # update AMP observation
+        amp_observations = self.collect_reference_motions(num_samples, times)
+        self.amp_observation_buffer[env_ids] = amp_observations.view(num_samples, self.cfg.num_amp_observations, -1)
+
+        return root_state, dof_pos, dof_vel
+
     def collect_reference_motions(self, num_samples: int, current_times: np.ndarray | None = None) -> torch.Tensor:
         # sample random motion times (or use the one specified)
         if current_times is None:
