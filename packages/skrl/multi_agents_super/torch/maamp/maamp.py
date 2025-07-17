@@ -374,7 +374,7 @@ class MAAMP(MultiAgentSuper):
         else:
             self._amp_state_preprocessor = self._empty_preprocessor
         
-        print("__init__ finished")
+        # print("__init__ finished")
 
     def init(self, trainer_cfg: Optional[Mapping[str, Any]] = None) -> None:
         """Initialize the agent"""
@@ -402,12 +402,15 @@ class MAAMP(MultiAgentSuper):
 
         # create tensors for motion dataset and reply buffer
         if self.motion_dataset is not None:
+            print("create motion dataset")
             self.motion_dataset.create_tensor(name="states", size=self.amp_observation_space, dtype=torch.float32)
             self.reply_buffer.create_tensor(name="states", size=self.amp_observation_space, dtype=torch.float32)
 
             # initialize motion dataset
             for _ in range(math.ceil(self.motion_dataset.memory_size / self._amp_batch_size)):
                 self.motion_dataset.add_samples(states=self.collect_reference_motions(self._amp_batch_size))
+        else:
+            print("self.motion_dataset is None:")
         # create temporary variables needed for storage and computation
         self._current_log_prob = []
         self._current_next_states = []
@@ -455,7 +458,7 @@ class MAAMP(MultiAgentSuper):
             output = self.policies["humanoid"].act({"states": preprocessed_state}, role="policy")
 
             data.append(output)
-            print("self.possible_agents: ",self.possible_agents)
+            # print("self.possible_agents: ",self.possible_agents)
             actions = {uid: d[0] for uid, d in zip(self.possible_agents, data)}
             log_prob = {uid: d[1] for uid, d in zip(self.possible_agents, data)}
             outputs = {uid: d[2] for uid, d in zip(self.possible_agents, data)}
@@ -504,7 +507,7 @@ class MAAMP(MultiAgentSuper):
         if self.memories:
             self._current_next_states = next_states
             amp_states = infos["amp_obs"]
-            print("amp_states.shape",amp_states.shape)
+            # print("amp_states.shape",amp_states.shape)
             values = {}
             # reward shaping
             if self._ppo_rewards_shaper is not None:
@@ -560,17 +563,17 @@ class MAAMP(MultiAgentSuper):
                 values=values["exo"],
             )
 
-            print("-----------infos ----------- ")
-            print("states:", states["humanoid"].shape)
-            print("actions:", actions["humanoid"].shape)
-            print("rewards:", rewards["humanoid"].shape)
-            print("next_states:", next_states["humanoid"].shape)
-            print("terminated:", terminated["humanoid"].shape)
-            print("truncated:", truncated["humanoid"].shape)
-            print("log_prob:", self._current_log_prob["humanoid"].shape)
-            print("values:", values["humanoid"].shape)
-            print("amp_states:", amp_states.shape)
-            print("next_values:", next_values.shape)
+            # print("-----------infos ----------- ")
+            # print("states:", states["humanoid"].shape)
+            # print("actions:", actions["humanoid"].shape)
+            # print("rewards:", rewards["humanoid"].shape)
+            # print("next_states:", next_states["humanoid"].shape)
+            # print("terminated:", terminated["humanoid"].shape)
+            # print("truncated:", truncated["humanoid"].shape)
+            # print("log_prob:", self._current_log_prob["humanoid"].shape)
+            # print("values:", values["humanoid"].shape)
+            # print("amp_states:", amp_states.shape)
+            # print("next_values:", next_values.shape)
 
             self.memories["humanoid"].add_samples(
                 states=states["humanoid"],
@@ -599,7 +602,6 @@ class MAAMP(MultiAgentSuper):
                     amp_states=amp_states,
                     next_values=next_values,
                 )
-            print(f"target_values")
 
         
 
@@ -698,12 +700,17 @@ class MAAMP(MultiAgentSuper):
 
         # -----------------------------------------------AMP---------------------------------------------#
         # update dataset of reference motions
+        print("self.collect_reference_motions: ",self.collect_reference_motions)
+        print("self._amp_batch_size: ",self._amp_batch_size)
+        print("self.collect_reference_motions: ",self.collect_reference_motions(self._amp_batch_size))
+
+
         self.motion_dataset.add_samples(states=self.collect_reference_motions(self._amp_batch_size))
 
         # compute combined rewards
-        rewards = memory.get_tensor_by_name("rewards")
+        rewards = memory.get_tensor_by_name("rewards")  
         amp_states = memory.get_tensor_by_name("amp_states")
-
+        print("rewards: ", rewards)
         with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
             amp_logits, _, _ = self.discriminator.act(
                 {"states": self._amp_state_preprocessor(amp_states)}, role="discriminator"
@@ -935,3 +942,158 @@ class MAAMP(MultiAgentSuper):
 
         if self._amp_learning_rate_scheduler:
             self.track_data("Learning / Learning rate", self.scheduler.get_last_lr()[0])
+
+
+
+    #---------------------------PPO---------------------------------------
+
+        policy = self.policies["exo"]
+        value = self.values["exo"]
+        memory = self.memories["exo"]
+
+        # compute returns and advantages
+        with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._ppo_mixed_precision):
+            value.train(False)
+            last_values, _, _ = value.act(
+                {"states": self._state_preprocessor[uid](self._current_next_states[uid].float())}, role="value"
+            )
+            value.train(True)
+        last_values = self._value_preprocessor[uid](last_values, inverse=True)
+
+        values = memory.get_tensor_by_name("values")
+        returns, advantages = compute_gae(
+            rewards=memory.get_tensor_by_name("rewards"),
+            dones=memory.get_tensor_by_name("terminated") | memory.get_tensor_by_name("truncated"),
+            values=values,
+            next_values=last_values,
+            discount_factor=self._ppo_discount_factor[uid],
+            lambda_coefficient=self._ppo_lambda[uid],
+        )
+
+        memory.set_tensor_by_name("values", self._value_preprocessor[uid](values, train=True))
+        memory.set_tensor_by_name("returns", self._value_preprocessor[uid](returns, train=True))
+        memory.set_tensor_by_name("advantages", advantages)
+
+        # sample mini-batches from memory
+        sampled_batches = memory.sample_all(names=self._tensors_names, mini_batches=self._mini_batches[uid])
+
+        cumulative_policy_loss = 0
+        cumulative_entropy_loss = 0
+        cumulative_value_loss = 0
+
+        # learning epochs
+        for epoch in range(self._learning_epochs[uid]):
+            kl_divergences = []
+
+            # mini-batches loop
+            for (
+                sampled_states,
+                sampled_actions,
+                sampled_log_prob,
+                sampled_values,
+                sampled_returns,
+                sampled_advantages,
+            ) in sampled_batches:
+
+                with torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
+
+                    sampled_states = self._state_preprocessor[uid](sampled_states, train=not epoch)
+
+                    _, next_log_prob, _ = policy.act(
+                        {"states": sampled_states, "taken_actions": sampled_actions}, role="policy"
+                    )
+
+                    # compute approximate KL divergence
+                    with torch.no_grad():
+                        ratio = next_log_prob - sampled_log_prob
+                        kl_divergence = ((torch.exp(ratio) - 1) - ratio).mean()
+                        kl_divergences.append(kl_divergence)
+
+                    # early stopping with KL divergence
+                    if self._kl_threshold[uid] and kl_divergence > self._kl_threshold[uid]:
+                        break
+
+                    # compute entropy loss
+                    if self._entropy_loss_scale[uid]:
+                        entropy_loss = -self._entropy_loss_scale[uid] * policy.get_entropy(role="policy").mean()
+                    else:
+                        entropy_loss = 0
+
+                    # compute policy loss
+                    ratio = torch.exp(next_log_prob - sampled_log_prob)
+                    surrogate = sampled_advantages * ratio
+                    surrogate_clipped = sampled_advantages * torch.clip(
+                        ratio, 1.0 - self._ratio_clip[uid], 1.0 + self._ratio_clip[uid]
+                    )
+
+                    policy_loss = -torch.min(surrogate, surrogate_clipped).mean()
+
+                    # compute value loss
+                    predicted_values, _, _ = value.act({"states": sampled_states}, role="value")
+
+                    if self._clip_predicted_values:
+                        predicted_values = sampled_values + torch.clip(
+                            predicted_values - sampled_values, min=-self._value_clip[uid], max=self._value_clip[uid]
+                        )
+                    value_loss = self._value_loss_scale[uid] * F.mse_loss(sampled_returns, predicted_values)
+
+                # optimization step
+                self.optimizers[uid].zero_grad()
+                self.scaler.scale(policy_loss + entropy_loss + value_loss).backward()
+
+                if config.torch.is_distributed:
+                    policy.reduce_parameters()
+                    if policy is not value:
+                        value.reduce_parameters()
+
+                if self._grad_norm_clip[uid] > 0:
+                    self.scaler.unscale_(self.optimizers[uid])
+                    if policy is value:
+                        nn.utils.clip_grad_norm_(policy.parameters(), self._grad_norm_clip[uid])
+                    else:
+                        nn.utils.clip_grad_norm_(
+                            itertools.chain(policy.parameters(), value.parameters()), self._grad_norm_clip[uid]
+                        )
+
+                self.scaler.step(self.optimizers[uid])
+                self.scaler.update()
+
+                # update cumulative losses
+                cumulative_policy_loss += policy_loss.item()
+                cumulative_value_loss += value_loss.item()
+                if self._entropy_loss_scale[uid]:
+                    cumulative_entropy_loss += entropy_loss.item()
+
+            # update learning rate
+            if self._learning_rate_scheduler[uid]:
+                if isinstance(self.schedulers[uid], KLAdaptiveLR):
+                    kl = torch.tensor(kl_divergences, device=self.device).mean()
+                    # reduce (collect from all workers/processes) KL in distributed runs
+                    if config.torch.is_distributed:
+                        torch.distributed.all_reduce(kl, op=torch.distributed.ReduceOp.SUM)
+                        kl /= config.torch.world_size
+                    self.schedulers[uid].step(kl.item())
+                else:
+                    self.schedulers[uid].step()
+
+        # record data
+        self.track_data(
+            f"Loss / Policy loss ({uid})",
+            cumulative_policy_loss / (self._learning_epochs[uid] * self._mini_batches[uid]),
+        )
+        self.track_data(
+            f"Loss / Value loss ({uid})",
+            cumulative_value_loss / (self._learning_epochs[uid] * self._mini_batches[uid]),
+        )
+        if self._entropy_loss_scale:
+            self.track_data(
+                f"Loss / Entropy loss ({uid})",
+                cumulative_entropy_loss / (self._learning_epochs[uid] * self._mini_batches[uid]),
+            )
+
+        self.track_data(
+            f"Policy / Standard deviation ({uid})", policy.distribution(role="policy").stddev.mean().item()
+        )
+
+        if self._learning_rate_scheduler[uid]:
+            self.track_data(f"Learning / Learning rate ({uid})", self.schedulers[uid].get_last_lr()[0])
