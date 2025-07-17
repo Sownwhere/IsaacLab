@@ -109,7 +109,7 @@ class HexoEnv(DirectMARLEnv):
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],
             self.robot.data.body_pos_w[:, self.key_body_indexes],
         )
-        print("++++++++++++++++")
+        # print("++++++++++++++++")
         # === 维护 AMP 历史 buffer ===
         for i in reversed(range(self.cfg.num_amp_observations - 1)):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
@@ -119,7 +119,8 @@ class HexoEnv(DirectMARLEnv):
         self.extras = {
             "amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)
         }
-        print("++++++++++++++++")
+        # print(self.extras["amp_obs"].shape)
+        # print("++++++++++++++++")
 
         # exo：保持原来的简单观测
         exo_obs = torch.cat(
@@ -131,7 +132,7 @@ class HexoEnv(DirectMARLEnv):
             ),
             dim=-1,
         )
-        print("++++++++++++++++")
+        # print("++++++++++++++++")
         # 组合返回
         return {
             "exo": exo_obs,
@@ -188,6 +189,34 @@ class HexoEnv(DirectMARLEnv):
         self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
 
+    def collect_reference_motions(self, num_samples: int, current_times: np.ndarray | None = None) -> torch.Tensor:
+        # sample random motion times (or use the one specified)
+        if current_times is None:
+            current_times = self._motion_loader.sample_times(num_samples)
+        times = (
+            np.expand_dims(current_times, axis=-1)
+            - self._motion_loader.dt * np.arange(0, self.cfg.num_amp_observations)
+        ).flatten()
+        # get motions
+        (
+            dof_positions,
+            dof_velocities,
+            body_positions,
+            body_rotations,
+            body_linear_velocities,
+            body_angular_velocities,
+        ) = self._motion_loader.sample(num_samples=num_samples, times=times)
+        # compute AMP observation
+        amp_observation = compute_obs(
+            dof_positions[:, self.motion_dof_indexes],
+            dof_velocities[:, self.motion_dof_indexes],
+            body_positions[:, self.motion_ref_body_index],
+            body_rotations[:, self.motion_ref_body_index],
+            body_linear_velocities[:, self.motion_ref_body_index],
+            body_angular_velocities[:, self.motion_ref_body_index],
+            body_positions[:, self.motion_key_body_indexes],
+        )
+        return amp_observation.view(-1, self.amp_observation_size)
 
 @torch.jit.script
 def normalize_angle(angle):

@@ -41,6 +41,9 @@ class HexoEnvCfg(DirectMARLEnvCfg):
     # simulation
     sim: SimulationCfg = SimulationCfg(dt=1 / 120, render_interval=decimation)
 
+    # scene
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=8, env_spacing=4.0, replicate_physics=True)
+
     # robot
     robot_cfg: ArticulationCfg = HEXO_CFG.replace(prim_path="/World/envs/env_.*/Robot")
     exo_dof_name = ["left_ankle_pitch_joint",
@@ -62,8 +65,7 @@ class HexoEnvCfg(DirectMARLEnvCfg):
 
                     
 
-    # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=8, env_spacing=4.0, replicate_physics=True)
+
 
     # reset
     initial_humanoid_angle_range = [-0.25, 0.25]  # the range in which the humanoid angle is sampled from on reset [rad]
