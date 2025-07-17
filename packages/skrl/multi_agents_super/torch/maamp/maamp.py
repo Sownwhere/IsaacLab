@@ -955,10 +955,10 @@ class MAAMP(MultiAgentSuper):
         with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._ppo_mixed_precision):
             value.train(False)
             last_values, _, _ = value.act(
-                {"states": self._state_preprocessor[uid](self._current_next_states[uid].float())}, role="value"
+                {"states": self._ppo_state_preprocessor(self._current_next_states["exo"].float())}, role="value"
             )
             value.train(True)
-        last_values = self._value_preprocessor[uid](last_values, inverse=True)
+        last_values = self._ppo_value_preprocessor(last_values, inverse=True)
 
         values = memory.get_tensor_by_name("values")
         returns, advantages = compute_gae(
@@ -966,23 +966,23 @@ class MAAMP(MultiAgentSuper):
             dones=memory.get_tensor_by_name("terminated") | memory.get_tensor_by_name("truncated"),
             values=values,
             next_values=last_values,
-            discount_factor=self._ppo_discount_factor[uid],
-            lambda_coefficient=self._ppo_lambda[uid],
+            discount_factor=self._ppo_discount_factor["exo"],
+            lambda_coefficient=self._ppo_lambda["exo"],
         )
 
-        memory.set_tensor_by_name("values", self._value_preprocessor[uid](values, train=True))
-        memory.set_tensor_by_name("returns", self._value_preprocessor[uid](returns, train=True))
+        memory.set_tensor_by_name("values", self._ppo_value_preprocessor(values, train=True))
+        memory.set_tensor_by_name("returns", self._ppo_value_preprocessor(returns, train=True))
         memory.set_tensor_by_name("advantages", advantages)
 
         # sample mini-batches from memory
-        sampled_batches = memory.sample_all(names=self._tensors_names, mini_batches=self._mini_batches[uid])
+        sampled_batches = memory.sample_all(names=self._tensors_names, mini_batches=self._ppo_mini_batches)
 
         cumulative_policy_loss = 0
         cumulative_entropy_loss = 0
         cumulative_value_loss = 0
 
         # learning epochs
-        for epoch in range(self._learning_epochs[uid]):
+        for epoch in range(self._ppo_learning_epochs["exo"]):
             kl_divergences = []
 
             # mini-batches loop
@@ -995,9 +995,9 @@ class MAAMP(MultiAgentSuper):
                 sampled_advantages,
             ) in sampled_batches:
 
-                with torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
+                with torch.autocast(device_type=self._device_type, enabled=self._ppo_mixed_precision):
 
-                    sampled_states = self._state_preprocessor[uid](sampled_states, train=not epoch)
+                    sampled_states = self._ppo_state_preprocessor(sampled_states, train=not epoch)
 
                     _, next_log_prob, _ = policy.act(
                         {"states": sampled_states, "taken_actions": sampled_actions}, role="policy"
@@ -1010,12 +1010,12 @@ class MAAMP(MultiAgentSuper):
                         kl_divergences.append(kl_divergence)
 
                     # early stopping with KL divergence
-                    if self._kl_threshold[uid] and kl_divergence > self._kl_threshold[uid]:
+                    if self._ppo_kl_threshold["exo"] and kl_divergence > self._ppo_kl_threshold["exo"]:
                         break
 
                     # compute entropy loss
-                    if self._entropy_loss_scale[uid]:
-                        entropy_loss = -self._entropy_loss_scale[uid] * policy.get_entropy(role="policy").mean()
+                    if self._ppo_entropy_loss_scale["exo"]:
+                        entropy_loss = -self._ppo_entropy_loss_scale["exo"] * policy.get_entropy(role="policy").mean()
                     else:
                         entropy_loss = 0
 
@@ -1023,7 +1023,7 @@ class MAAMP(MultiAgentSuper):
                     ratio = torch.exp(next_log_prob - sampled_log_prob)
                     surrogate = sampled_advantages * ratio
                     surrogate_clipped = sampled_advantages * torch.clip(
-                        ratio, 1.0 - self._ratio_clip[uid], 1.0 + self._ratio_clip[uid]
+                        ratio, 1.0 - self._ppo_ratio_clip["exo"], 1.0 + self._ppo_ratio_clip["exo"]
                     )
 
                     policy_loss = -torch.min(surrogate, surrogate_clipped).mean()
@@ -1031,14 +1031,14 @@ class MAAMP(MultiAgentSuper):
                     # compute value loss
                     predicted_values, _, _ = value.act({"states": sampled_states}, role="value")
 
-                    if self._clip_predicted_values:
+                    if self._ppo_clip_predicted_values:
                         predicted_values = sampled_values + torch.clip(
-                            predicted_values - sampled_values, min=-self._value_clip[uid], max=self._value_clip[uid]
+                            predicted_values - sampled_values, min=-self._ppo_value_clip["exo"], max=self._ppo_value_clip
                         )
-                    value_loss = self._value_loss_scale[uid] * F.mse_loss(sampled_returns, predicted_values)
+                    value_loss = self._ppo_value_loss_scale["exo"] * F.mse_loss(sampled_returns, predicted_values)
 
                 # optimization step
-                self.optimizers[uid].zero_grad()
+                self.optimizers["exo"].zero_grad()
                 self.scaler.scale(policy_loss + entropy_loss + value_loss).backward()
 
                 if config.torch.is_distributed:
@@ -1046,54 +1046,54 @@ class MAAMP(MultiAgentSuper):
                     if policy is not value:
                         value.reduce_parameters()
 
-                if self._grad_norm_clip[uid] > 0:
-                    self.scaler.unscale_(self.optimizers[uid])
+                if self._ppo_grad_norm_clip["exo"] > 0:
+                    self.scaler.unscale_(self.optimizers["exo"])
                     if policy is value:
-                        nn.utils.clip_grad_norm_(policy.parameters(), self._grad_norm_clip[uid])
+                        nn.utils.clip_grad_norm_(policy.parameters(), self._ppo_grad_norm_clip)
                     else:
                         nn.utils.clip_grad_norm_(
-                            itertools.chain(policy.parameters(), value.parameters()), self._grad_norm_clip[uid]
+                            itertools.chain(policy.parameters(), value.parameters()), self._ppo_grad_norm_clip
                         )
 
-                self.scaler.step(self.optimizers[uid])
+                self.scaler.step(self.optimizers["exo"])
                 self.scaler.update()
 
                 # update cumulative losses
                 cumulative_policy_loss += policy_loss.item()
                 cumulative_value_loss += value_loss.item()
-                if self._entropy_loss_scale[uid]:
+                if self._ppo_entropy_loss_scale:
                     cumulative_entropy_loss += entropy_loss.item()
 
             # update learning rate
-            if self._learning_rate_scheduler[uid]:
-                if isinstance(self.schedulers[uid], KLAdaptiveLR):
+            if self._ppo_learning_rate_scheduler["exo"]:
+                if isinstance(self.schedulers["exo"], KLAdaptiveLR):
                     kl = torch.tensor(kl_divergences, device=self.device).mean()
                     # reduce (collect from all workers/processes) KL in distributed runs
                     if config.torch.is_distributed:
                         torch.distributed.all_reduce(kl, op=torch.distributed.ReduceOp.SUM)
                         kl /= config.torch.world_size
-                    self.schedulers[uid].step(kl.item())
+                    self.schedulers["exo"].step(kl.item())
                 else:
-                    self.schedulers[uid].step()
+                    self.schedulers["exo"].step()
 
         # record data
         self.track_data(
-            f"Loss / Policy loss ({uid})",
-            cumulative_policy_loss / (self._learning_epochs[uid] * self._mini_batches[uid]),
+            f"Loss / Policy loss (exo)",
+            cumulative_policy_loss / (self._ppo_learning_epochs["exo"] * self._ppo_mini_batches["exo"]),
         )
         self.track_data(
-            f"Loss / Value loss ({uid})",
-            cumulative_value_loss / (self._learning_epochs[uid] * self._mini_batches[uid]),
+            f"Loss / Value loss (exo)",
+            cumulative_value_loss / (self._ppo_learning_epochs["exo"] * self._ppo_mini_batches["exo"]),
         )
-        if self._entropy_loss_scale:
+        if self._ppo_entropy_loss_scale:
             self.track_data(
-                f"Loss / Entropy loss ({uid})",
-                cumulative_entropy_loss / (self._learning_epochs[uid] * self._mini_batches[uid]),
+                f"Loss / Entropy loss (exo)",
+                cumulative_entropy_loss / (self._ppo_learning_epochs["exo"] * self._ppo_mini_batches["exo"]),
             )
 
         self.track_data(
-            f"Policy / Standard deviation ({uid})", policy.distribution(role="policy").stddev.mean().item()
+            f"Policy / Standard deviation (exo)", policy.distribution(role="policy").stddev.mean().item()
         )
 
-        if self._learning_rate_scheduler[uid]:
-            self.track_data(f"Learning / Learning rate ({uid})", self.schedulers[uid].get_last_lr()[0])
+        if self._ppo_learning_rate_scheduler["exo"]:
+            self.track_data(f"Learning / Learning rate (exo)", self.schedulers["exo"].get_last_lr()[0])
