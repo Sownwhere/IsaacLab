@@ -171,7 +171,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # get checkpoint path (to resume training)
     resume_path = retrieve_file_path(args_cli.checkpoint) if args_cli.checkpoint else None
-
+    # print(f"env_cfg : {env_cfg}")
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 
@@ -201,6 +201,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # configure and instantiate the skrl runner
     # https://skrl.readthedocs.io/en/latest/api/utils/runner.html
+
+    # print(f"[INFO] Running training mode...  {agent_cfg}")
     runner = Runner(env, agent_cfg)
 
     # load checkpoint (if specified)
