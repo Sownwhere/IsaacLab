@@ -389,6 +389,7 @@ class MAAMP(MultiAgentSuper):
         if self.memories:
             for uid in self.possible_agents:
                 self.memories[uid].create_tensor(name="states", size=self.observation_spaces[uid], dtype=torch.float32)
+                self.memories[uid].create_tensor(name="next_states", size=self.observation_spaces[uid], dtype=torch.float32)
                 self.memories[uid].create_tensor(name="actions", size=self.action_spaces[uid], dtype=torch.float32)
                 self.memories[uid].create_tensor(name="rewards", size=1, dtype=torch.float32)
                 self.memories[uid].create_tensor(name="terminated", size=1, dtype=torch.bool)
@@ -402,7 +403,19 @@ class MAAMP(MultiAgentSuper):
                 self.memories[uid].create_tensor(name="next_values", size=1, dtype=torch.float32)
 
                 # tensors sampled during training
-                self._tensors_names = ["states", "actions", "log_prob", "values", "returns", "advantages","amp_states","next_values"]
+                self._tensors_names = [
+                "states",
+                "actions",
+                "rewards",
+                "next_states",
+                "terminated",
+                "log_prob",
+                "values",
+                "returns",
+                "advantages",
+                "amp_states",
+                "next_values",
+            ]
 
         # create tensors for motion dataset and reply buffer
         if self.motion_dataset is not None:
@@ -755,7 +768,7 @@ class MAAMP(MultiAgentSuper):
         memory.set_tensor_by_name("advantages", advantages)
 
         # sample mini-batches from memories
-        sampled_batches = memory.sample_all(names=self.tensors_names, mini_batches=self._amp_mini_batches)
+        sampled_batches = memory.sample_all(names=self._tensors_names, mini_batches=self._amp_mini_batches)
         sampled_motion_batches = self.motion_dataset.sample(
             names=["states"], batch_size=memory.memory_size * memory.num_envs, mini_batches=self._amp_mini_batches
         )
@@ -766,7 +779,7 @@ class MAAMP(MultiAgentSuper):
                 mini_batches=self._amp_mini_batches,
             )
         else:
-            sampled_replay_batches = [[batches[self.tensors_names.index("amp_states")]] for batches in sampled_batches]
+            sampled_replay_batches = [[batches[self._tensors_names.index("amp_states")]] for batches in sampled_batches]
 
         cumulative_policy_loss = 0
         cumulative_entropy_loss = 0
