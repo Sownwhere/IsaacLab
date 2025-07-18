@@ -712,7 +712,7 @@ class MAAMP(MultiAgentSuper):
         amp_states = memory.get_tensor_by_name("amp_states")
         print("rewards: ", rewards)
         with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
-            amp_logits, _, _ = self.discriminator.act(
+            amp_logits, _, _ = self.discriminator["humanoid"].act(
                 {"states": self._amp_state_preprocessor(amp_states)}, role="discriminator"
             )
             style_reward = -torch.log(
@@ -836,11 +836,11 @@ class MAAMP(MultiAgentSuper):
                         )
 
                     sampled_amp_motion_states.requires_grad_(True)
-                    amp_logits, _, _ = self.discriminator.act({"states": sampled_amp_states}, role="discriminator")
-                    amp_replay_logits, _, _ = self.discriminator.act(
+                    amp_logits, _, _ = self.discriminator["humanoid"].act({"states": sampled_amp_states}, role="discriminator")
+                    amp_replay_logits, _, _ = self.discriminator["humanoid"].act(
                         {"states": sampled_amp_replay_states}, role="discriminator"
                     )
-                    amp_motion_logits, _, _ = self.discriminator.act(
+                    amp_motion_logits, _, _ = self.discriminator["humanoid"].act(
                         {"states": sampled_amp_motion_states}, role="discriminator"
                     )
 
@@ -854,7 +854,7 @@ class MAAMP(MultiAgentSuper):
 
                     # discriminator logit regularization
                     if self._amp_discriminator_logit_regularization_scale:
-                        logit_weights = torch.flatten(list(self.discriminator.modules())[-1].weight)
+                        logit_weights = torch.flatten(list(self.discriminator["humanoid"].modules())[-1].weight)
                         discriminator_loss += self._amp_discriminator_logit_regularization_scale * torch.sum(
                             torch.square(logit_weights)
                         )
@@ -876,7 +876,7 @@ class MAAMP(MultiAgentSuper):
                     if self._amp_discriminator_weight_decay_scale:
                         weights = [
                             torch.flatten(module.weight)
-                            for module in self.discriminator.modules()
+                            for module in self.discriminator["humanoid"].modules()
                             if isinstance(module, torch.nn.Linear)
                         ]
                         weight_decay = torch.sum(torch.square(torch.cat(weights, dim=-1)))
@@ -897,7 +897,7 @@ class MAAMP(MultiAgentSuper):
                     self.scaler.unscale_(self.optimizer)
                     nn.utils.clip_grad_norm_(
                         itertools.chain(
-                            policy.parameters(), value.parameters(), self.discriminator.parameters()
+                            policy.parameters(), value.parameters(), self.discriminator["humanoid"].parameters()
                         ),
                         self._amp_grad_norm_clip,
                     )
