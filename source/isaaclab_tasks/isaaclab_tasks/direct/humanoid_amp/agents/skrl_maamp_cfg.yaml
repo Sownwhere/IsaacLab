@@ -64,11 +64,25 @@ models:
           activations: relu
       output: ONE
 
-# Rollout memory
+
+  # Rollout memory
 # https://skrl.readthedocs.io/en/latest/api/memories/random.html
 memory:
   class: RandomMemory
   memory_size: -1  # automatically determined (same as agent:rollouts)
+
+# AMP memory (reference motion dataset)
+# https://skrl.readthedocs.io/en/latest/api/memories/random.html
+motion_dataset:
+  class: RandomMemory
+  memory_size: 200000
+
+# AMP memory (preventing discriminator overfitting)
+# https://skrl.readthedocs.io/en/latest/api/memories/random.html
+reply_buffer:
+  class: RandomMemory
+  memory_size: 1000000
+
 
 
 # IPPO agent configuration (field names are from IPPO_DEFAULT_CONFIG)
