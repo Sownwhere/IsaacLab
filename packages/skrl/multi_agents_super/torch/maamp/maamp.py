@@ -172,6 +172,8 @@ class MAAMP(MultiAgentSuper):
         self.policies = {uid: self.models[uid].get("policy", None) for uid in self.possible_agents}
         self.values = {uid: self.models[uid].get("value", None) for uid in self.possible_agents}
         self.discriminator = {uid: self.models[uid].get("discriminator", None) for uid in self.possible_agents}
+
+        print(" self.discriminator ",  self.discriminator )
         
 
         for uid in self.possible_agents:
@@ -214,6 +216,7 @@ class MAAMP(MultiAgentSuper):
 
         self._ppo_state_preprocessor = self.cfg["PPO"]["state_preprocessor"]
         self._ppo_state_preprocessor_kwargs = self.cfg["PPO"]["state_preprocessor_kwargs"]
+
         self._ppo_value_preprocessor = self.cfg["PPO"]["value_preprocessor"]
         self._ppo_value_preprocessor_kwargs = self.cfg["PPO"]["value_preprocessor_kwargs"]
 
@@ -252,6 +255,7 @@ class MAAMP(MultiAgentSuper):
         self._amp_value_preprocessor = self.cfg["AMP"]["value_preprocessor"]
         self._amp_value_preprocessor_kwargs = self.cfg["AMP"]["value_preprocessor_kwargs"]
         self._amp_amp_state_preprocessor = self.cfg["AMP"]["amp_state_preprocessor"]
+        # print("self._amp_amp_state_preprocessor",self._amp_amp_state_preprocessor)
         self._amp_amp_state_preprocessor_kwargs = self.cfg["AMP"]["amp_state_preprocessor_kwargs"]
 
 
@@ -277,7 +281,7 @@ class MAAMP(MultiAgentSuper):
         self._amp_mixed_precision = self.cfg["AMP"]["mixed_precision"]
 
         if observation_spaces is not None:
-            print("MAAMP observation_space",amp_observation_space)
+            # print("MAAMP observation_space",amp_observation_space)
             self.amp_observation_space = amp_observation_space
         else:
             print("observation is None!")
@@ -309,7 +313,6 @@ class MAAMP(MultiAgentSuper):
             if ppo_policy is ppo_value:
                 optimizer = torch.optim.Adam(ppo_policy.parameters(), lr=self._ppo_learning_rate[uid])
             else:
-                print(" self._ppo_learning_rate: ", self._ppo_learning_rate)
                 optimizer = torch.optim.Adam(
                     itertools.chain(ppo_policy.parameters(), ppo_value.parameters()), lr=self._ppo_learning_rate
                 )
@@ -369,10 +372,11 @@ class MAAMP(MultiAgentSuper):
             self._amp_value_preprocessor = self._empty_preprocessor
 
         if self._amp_amp_state_preprocessor:
+            # print("AMP state preprocessor", self._amp_amp_state_preprocessor_kwargs)
             self._amp_amp_state_preprocessor = self._amp_amp_state_preprocessor(**self._amp_amp_state_preprocessor_kwargs)
             self.checkpoint_modules["humanoid"]["amp_state_preprocessor"] = self._amp_amp_state_preprocessor
         else:
-            self._amp_state_preprocessor = self._empty_preprocessor
+            self._amp_amp_state_preprocessor = self._empty_preprocessor
         
         # print("__init__ finished")
 
@@ -516,6 +520,8 @@ class MAAMP(MultiAgentSuper):
             if self._amp_rewards_shaper is not None:
                 rewards["humanoid"] = self._amp_rewards_shaper(rewards["humanoid"], timestep, timesteps)
 
+            # print("compute values", self.values)
+            # print("compute EXO  values", self.values["exo"])
             # compute values
             with torch.autocast(device_type=self._device_type, enabled=self._ppo_mixed_precision):
                 
@@ -698,11 +704,16 @@ class MAAMP(MultiAgentSuper):
         value = self.values["humanoid"]
         memory = self.memories["humanoid"]
 
+
+        print("self.policy", policy)
+        print("self.value", value)
+        print("self.discriminator", self.discriminator["humanoid"])
+
         # -----------------------------------------------AMP---------------------------------------------#
         # update dataset of reference motions
-        print("self.collect_reference_motions: ",self.collect_reference_motions)
-        print("self._amp_batch_size: ",self._amp_batch_size)
-        print("self.collect_reference_motions: ",self.collect_reference_motions(self._amp_batch_size))
+        # print("self.collect_reference_motions: ",self.collect_reference_motions)
+        # print("self._amp_batch_size: ",self._amp_batch_size)
+        # print("self.collect_reference_motions: ",self.collect_reference_motions(self._amp_batch_size))
 
 
         self.motion_dataset.add_samples(states=self.collect_reference_motions(self._amp_batch_size))
@@ -710,14 +721,18 @@ class MAAMP(MultiAgentSuper):
         # compute combined rewards
         rewards = memory.get_tensor_by_name("rewards")  
         amp_states = memory.get_tensor_by_name("amp_states")
-        print("rewards: ", rewards)
+        # print("amp_states: ",amp_states.shape)
+        # print("self._amp_amp_state_preprocessor(amp_states) shape",self._amp_amp_state_preprocessor(amp_states).shape )
         with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
             amp_logits, _, _ = self.discriminator["humanoid"].act(
-                {"states": self._amp_state_preprocessor(amp_states)}, role="discriminator"
+                {"states": self._amp_amp_state_preprocessor(amp_states)}, role="discriminator"
             )
+            print("amp_logits.shape", amp_logits.shape)
             style_reward = -torch.log(
                 torch.maximum(1 - 1 / (1 + torch.exp(-amp_logits)), torch.tensor(0.0001, device=self.device))
             )
+            print("style_reward",style_reward.shape)
+            print("self._amp_discriminator_reward_scale",self._amp_discriminator_reward_scale)
             style_reward *= self._amp_discriminator_reward_scale
             style_reward = style_reward.view(rewards.shape)
 
