@@ -98,12 +98,12 @@ agent:
     lambda: 0.95
 
     learning_rate: 1.0e-3
-    learning_rate_scheduler: null
+    learning_rate_scheduler: KLAdaptiveLR
     learning_rate_scheduler_kwargs: {}
 
-    state_preprocessor: null
+    state_preprocessor: RunningStandardScaler
     state_preprocessor_kwargs: {}
-    value_preprocessor: null
+    value_preprocessor: RunningStandardScaler
     value_preprocessor_kwargs: {}
 
     random_timesteps: 0
@@ -148,11 +148,11 @@ agent:
     learning_rate_scheduler: null
     learning_rate_scheduler_kwargs: {}
 
-    state_preprocessor: null
+    state_preprocessor:  RunningStandardScaler
     state_preprocessor_kwargs: {}
-    value_preprocessor: null
+    value_preprocessor:  RunningStandardScaler
     value_preprocessor_kwargs: {}
-    amp_state_preprocessor: null
+    amp_state_preprocessor:  RunningStandardScaler
     amp_state_preprocessor_kwargs: {}
 
     random_timesteps: 0
@@ -161,7 +161,7 @@ agent:
     grad_norm_clip: 0.0
     ratio_clip: 0.2
     value_clip: 0.2
-    clip_predicted_values: false
+    clip_predicted_values: True
 
     entropy_loss_scale: 0.0
     value_loss_scale: 2.5

@@ -43,6 +43,8 @@ class HexoEnv(DirectMARLEnv):
         # load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
 
+        print("self._motion_loader:", self._motion_loader)
+
         # DOF and key body indexes  
         # key_body_names = ["base_link"]  
         key_body_names = [ 
@@ -67,13 +69,14 @@ class HexoEnv(DirectMARLEnv):
         self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
         self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
         self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
-
+        print("self.motion_key_body_indexes: " ,self.motion_key_body_indexes)
         # reconfigure AMP observation space according to the number of observations and create the buffer
         self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space
         self.amp_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.amp_observation_size,))
         self.amp_observation_buffer = torch.zeros(
             (self.num_envs, self.cfg.num_amp_observations, self.cfg.amp_observation_space), device=self.device
         )
+
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
         # add ground plane
@@ -165,28 +168,47 @@ class HexoEnv(DirectMARLEnv):
         time_outs = {agent: time_out for agent in self.cfg.possible_agents}
         return terminated, time_outs
 
-    def _reset_idx(self, env_ids: Sequence[int] | None):
-        if env_ids is None:
+    # def _reset_idx(self, env_ids: Sequence[int] | None):
+    #     if env_ids is None:
+    #         env_ids = self.robot._ALL_INDICES
+    #     super()._reset_idx(env_ids)
+
+    #     joint_pos = self.robot.data.default_joint_pos[env_ids]
+    #     joint_pos[:, self._exo_dof_idx] += sample_uniform(
+    #         self.cfg.initial_exo_angle_range[0] * math.pi,
+    #         self.cfg.initial_exo_angle_range[1] * math.pi,
+    #         joint_pos[:, self._exo_dof_idx].shape,
+    #         joint_pos.device,
+    #     )
+    #     joint_vel = self.robot.data.default_joint_vel[env_ids]
+
+    #     default_root_state = self.robot.data.default_root_state[env_ids]
+    #     default_root_state[:, :3] += self.scene.env_origins[env_ids]
+
+    #     self.joint_pos[env_ids] = joint_pos
+    #     self.joint_vel[env_ids] = joint_vel
+
+    #     self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
+    #     self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
+    #     self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
+
+
+    def _reset_idx(self, env_ids: torch.Tensor | None):
+        if env_ids is None or len(env_ids) == self.num_envs:
             env_ids = self.robot._ALL_INDICES
+        self.robot.reset(env_ids)
         super()._reset_idx(env_ids)
 
-        joint_pos = self.robot.data.default_joint_pos[env_ids]
-        joint_pos[:, self._exo_dof_idx] += sample_uniform(
-            self.cfg.initial_exo_angle_range[0] * math.pi,
-            self.cfg.initial_exo_angle_range[1] * math.pi,
-            joint_pos[:, self._exo_dof_idx].shape,
-            joint_pos.device,
-        )
-        joint_vel = self.robot.data.default_joint_vel[env_ids]
+        if self.cfg.reset_strategy == "default":
+            root_state, joint_pos, joint_vel = self._reset_strategy_default(env_ids)
+        elif self.cfg.reset_strategy.startswith("random"):
+            start = "start" in self.cfg.reset_strategy
+            root_state, joint_pos, joint_vel = self._reset_strategy_random(env_ids, start)
+        else:
+            raise ValueError(f"Unknown reset strategy: {self.cfg.reset_strategy}")
 
-        default_root_state = self.robot.data.default_root_state[env_ids]
-        default_root_state[:, :3] += self.scene.env_origins[env_ids]
-
-        self.joint_pos[env_ids] = joint_pos
-        self.joint_vel[env_ids] = joint_vel
-
-        self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
-        self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
+        self.robot.write_root_link_pose_to_sim(root_state[:, :7], env_ids)
+        self.robot.write_root_com_velocity_to_sim(root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
 
     def _reset_strategy_random(
