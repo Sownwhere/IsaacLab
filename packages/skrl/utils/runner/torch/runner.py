@@ -434,7 +434,6 @@ class Runner:
             cfg["memory"]["memory_size"] = cfg["agent"]["AMP"]["rollouts"]  # memory_size is the agent's number of rollouts
         for agent_id in possible_agents:
             memories[agent_id] = memory_class(num_envs=num_envs, device=device, **self._process_cfg(cfg["memory"]))
-
         ## amp observation space
         try:
             amp_observation_space = env.amp_observation_space
@@ -453,11 +452,17 @@ class Runner:
 
         agent_cfg.update(self._process_cfg(agent_cfg_all))
 
-        for agent_name in agent_names:
+        for agent_name, agent_id in zip(agent_names, possible_agents):
+            print(f"Processing agent: {agent_name} with id: {agent_id}")
+            
             agent_cfg[agent_name]["state_preprocessor_kwargs"].update(
-                {agent_id: {"size": observation_spaces[agent_id], "device": device}})
-            agent_cfg[agent_name]["value_preprocessor_kwargs"].update({"size": 1, "device": device})
+                {"size": observation_spaces[agent_id], "device": device})
+            
+            agent_cfg[agent_name]["value_preprocessor_kwargs"].update(
+                {"size": 1, "device": device})
+
         
+        # amp_state_preprocessor_kwargs
         agent_cfg["AMP"]["amp_state_preprocessor_kwargs"].update({"size": amp_observation_space, "device": device})
 
         motion_dataset = None
