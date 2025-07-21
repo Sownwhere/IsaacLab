@@ -562,6 +562,9 @@ class MAAMP(MultiAgentSuper):
 
             # compute next values
             with torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
+                print("***next_states.keys: ",next_states.keys())
+                print("***next_states[exo].shape: ",next_states["exo"].shape)
+                print("***next_states[humanoid].shape: ",next_states["humanoid"].shape)
                 next_values, _, _ = self.values["humanoid"].act({"states": self._amp_state_preprocessor(next_states["humanoid"])}, role="value")
                 next_values= self._amp_value_preprocessor(next_values, inverse=True)
 

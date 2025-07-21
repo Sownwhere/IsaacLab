@@ -32,6 +32,7 @@ class Runner:
 
         self._models = self._generate_models(self._env, copy.deepcopy(self._cfg))
         self._agent = self._generate_agent(self._env, copy.deepcopy(self._cfg), self._models)
+        print("***zhhw type(self.agent): ",type(self.agent))
         self._trainer = self._generate_trainer(self._env, copy.deepcopy(self._cfg), self._agent)
 
     @property
