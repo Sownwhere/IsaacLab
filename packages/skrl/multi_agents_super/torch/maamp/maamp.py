@@ -713,14 +713,12 @@ class MAAMP(MultiAgentSuper):
             return returns, advantages
 
 
-        policy = self.policies["humanoid"]
+        self.policies["humanoid"] = self.policies["humanoid"]
         value = self.values["humanoid"]
-        memory = self.memories["humanoid"]
 
 
-        print("self.policy", policy)
-        print("self.value", value)
-        print("self.discriminator", self.discriminator["humanoid"])
+        if self.memories is None:
+           raise ValueError("Memories not initialized.")
 
         # -----------------------------------------------AMP---------------------------------------------#
         # update dataset of reference motions
@@ -732,8 +730,8 @@ class MAAMP(MultiAgentSuper):
         self.motion_dataset.add_samples(states=self.collect_reference_motions(self._amp_batch_size))
 
         # compute combined rewards
-        rewards = memory.get_tensor_by_name("rewards")  
-        amp_states = memory.get_tensor_by_name("amp_states")
+        rewards = self.memories["humanoid"].get_tensor_by_name("rewards")  
+        amp_states = self.memories["humanoid"].get_tensor_by_name("amp_states")
         # print("amp_states: ",amp_states.shape)
         # print("self._amp_amp_state_preprocessor(amp_states) shape",self._amp_amp_state_preprocessor(amp_states).shape )
         with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
@@ -752,30 +750,30 @@ class MAAMP(MultiAgentSuper):
         combined_rewards = self._amp_task_reward_weight * rewards + self._amp_style_reward_weight * style_reward
 
         # compute returns and advantages
-        values = memory.get_tensor_by_name("values")
-        next_values = memory.get_tensor_by_name("next_values")
+        values =  self.memories["humanoid"].get_tensor_by_name("values")
+        next_values = self.memories["humanoid"].get_tensor_by_name("next_values")
         returns, advantages = compute_gae(
             rewards=combined_rewards,
-            dones=memory.get_tensor_by_name("terminated") | memory.get_tensor_by_name("truncated"),
+            dones=self.memories["humanoid"].get_tensor_by_name("terminated") | self.memories["humanoid"].get_tensor_by_name("truncated"),
             values=values,
             next_values=next_values,
             discount_factor=self._amp_discount_factor,
             lambda_coefficient=self._amp_lambda,
         )
 
-        memory.set_tensor_by_name("values", self._amp_value_preprocessor(values, train=True))
-        memory.set_tensor_by_name("returns", self._amp_value_preprocessor(returns, train=True))
-        memory.set_tensor_by_name("advantages", advantages)
+        self.memories["humanoid"].set_tensor_by_name("values", self._amp_value_preprocessor(values, train=True))
+        self.memories["humanoid"].set_tensor_by_name("returns", self._amp_value_preprocessor(returns, train=True))
+        self.memories["humanoid"].set_tensor_by_name("advantages", advantages)
 
         # sample mini-batches from memories
-        sampled_batches = memory.sample_all(names=self._tensors_names, mini_batches=self._amp_mini_batches)
+        sampled_batches = self.memories["humanoid"].sample_all(names=self._tensors_names, mini_batches=self._amp_mini_batches)
         sampled_motion_batches = self.motion_dataset.sample(
-            names=["states"], batch_size=memory.memory_size * memory.num_envs, mini_batches=self._amp_mini_batches
+            names=["states"], batch_size=self.memories["humanoid"].memory_size * self.memories["humanoid"].num_envs, mini_batches=self._amp_mini_batches
         )
         if len(self.reply_buffer):
             sampled_replay_batches = self.reply_buffer.sample(
                 names=["states"],
-                batch_size=memory.memory_size * memory.num_envs,
+                batch_size=self.memories["humanoid"].memory_size * self.memories["humanoid"].num_envs,
                 mini_batches=self._amp_mini_batches,
             )
         else:
@@ -809,7 +807,7 @@ class MAAMP(MultiAgentSuper):
 
                     sampled_states = self._amp_state_preprocessor(sampled_states, train=True)
 
-                    _, next_log_prob, _ = policy.act(
+                    _, next_log_prob, _ = self.policies["humanoid"].act(
                         {"states": sampled_states, "taken_actions": sampled_actions}, role="policy"
                     )
 
@@ -821,7 +819,7 @@ class MAAMP(MultiAgentSuper):
 
                     # compute entropy loss
                     if self._amp_entropy_loss_scale:
-                        entropy_loss = -self._amp_entropy_loss_scale * policy.get_entropy(role="policy").mean()
+                        entropy_loss = -self._amp_entropy_loss_scale * self.policies["humanoid"].get_entropy(role="policy").mean()
                     else:
                         entropy_loss = 0
 
@@ -835,8 +833,9 @@ class MAAMP(MultiAgentSuper):
                     policy_loss = -torch.min(surrogate, surrogate_clipped).mean()
 
                     # compute value loss
-                    predicted_values, _, _ = value.act({"states": sampled_states}, role="value")
+                    predicted_values, _, _ = self.values["humanoid"].act({"states": sampled_states}, role="value")
 
+                    print("_amp_clip_predicted_values: ", self._amp_clip_predicted_values)
                     if self._amp_clip_predicted_values:
                         predicted_values = sampled_values + torch.clip(
                             predicted_values - sampled_values, min=-self._amp_value_clip, max=self._amp_value_clip
@@ -844,22 +843,23 @@ class MAAMP(MultiAgentSuper):
                     value_loss = self._amp_value_loss_scale * F.mse_loss(sampled_returns, predicted_values)
 
                     # compute discriminator loss
+                    print("compute discriminator loss: self._amp_discriminator_batch_size", self._amp_discriminator_batch_size)
                     if self._amp_discriminator_batch_size:
-                        sampled_amp_states = self._amp_state_preprocessor(
+                        sampled_amp_states = self._amp_amp_state_preprocessor(
                             sampled_amp_states[0 : self._amp_discriminator_batch_size], train=True
                         )
-                        sampled_amp_replay_states = self._amp_state_preprocessor(
+                        sampled_amp_replay_states = self._amp_amp_state_preprocessor(
                             sampled_replay_batches[batch_index][0][0 : self._amp_discriminator_batch_size], train=True
                         )
-                        sampled_amp_motion_states = self._amp_state_preprocessor(
+                        sampled_amp_motion_states = self._amp_amp_state_preprocessor(
                             sampled_motion_batches[batch_index][0][0 : self._amp_discriminator_batch_size], train=True
                         )
                     else:
-                        sampled_amp_states = self._amp_state_preprocessor(sampled_amp_states, train=True)
+                        sampled_amp_states = self._amp_amp_state_preprocessor(sampled_amp_states, train=True)
                         sampled_amp_replay_states = self._amp_state_preprocessor(
                             sampled_replay_batches[batch_index][0], train=True
                         )
-                        sampled_amp_motion_states = self._amp_state_preprocessor(
+                        sampled_amp_motion_states = self._amp_amp_state_preprocessor(
                             sampled_motion_batches[batch_index][0], train=True
                         )
 
@@ -913,24 +913,24 @@ class MAAMP(MultiAgentSuper):
                     discriminator_loss *= self._amp_discriminator_loss_scale
 
                 # optimization step
-                self.optimizer.zero_grad()
+                self.optimizers["humanoid"].zero_grad()
                 self.scaler.scale(policy_loss + entropy_loss + value_loss + discriminator_loss).backward()
 
                 if config.torch.is_distributed:
-                    policy.reduce_parameters()
-                    value.reduce_parameters()
-                    discriminator.reduce_parameters()
+                    self.policies["humanoid"].reduce_parameters()
+                    self.values["humanoid"].reduce_parameters()
+                    self.discriminator["humanoid"].reduce_parameters()
 
                 if self._amp_grad_norm_clip > 0:
-                    self.scaler.unscale_(self.optimizer)
+                    self.scaler.unscale_(self.optimizers["humanoid"] )
                     nn.utils.clip_grad_norm_(
                         itertools.chain(
-                            policy.parameters(), value.parameters(), self.discriminator["humanoid"].parameters()
+                            self.policies["humanoid"].parameters(), self.values["humanoid"].parameters(), self.discriminator["humanoid"].parameters()
                         ),
                         self._amp_grad_norm_clip,
                     )
 
-                self.scaler.step(self.optimizer)
+                self.scaler.step(self.optimizers["humanoid"] )
                 self.scaler.update()
 
                 # update cumulative losses
@@ -966,7 +966,7 @@ class MAAMP(MultiAgentSuper):
             "Loss / Discriminator loss", cumulative_discriminator_loss / (self._amp_learning_epochs * self._amp_mini_batches)
         )
 
-        self.track_data("Policy / Standard deviation", policy.distribution(role="policy").stddev.mean().item())
+        self.track_data("Policy / Standard deviation", self.policies["humanoid"].distribution(role="policy").stddev.mean().item())
 
         if self._amp_learning_rate_scheduler:
             self.track_data("Learning / Learning rate", self.scheduler.get_last_lr()[0])
