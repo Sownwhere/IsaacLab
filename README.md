@@ -78,6 +78,29 @@ for broader dissemination of your work.
 Join us in building a vibrant, collaborative ecosystem where creativity and technology intersect. Your
 contributions can make a significant impact on the Isaac Lab community and beyond!
 
+## Start
+### Symbolic Links
+```
+ln -s ~/IsaacLab/source/isaaclab_tasks/isaaclab_tasks/direct/humanoid_amp ~/IsaacLab/
+
+ln -s ~/IsaacLab/scripts/reinforcement_learning/skrl ~/IsaacLab/
+```
+### Train
+```
+./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Isaac-G1-AMP-Walk-Direct-v0 --headless
+or
+
+./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Isaac-G1-AMP-Dance-Direct-v0 --headless
+```
+### Eval
+```
+./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task Isaac-G1-AMP-Walk-Direct-v0 --num_envs 32 
+```
+### TensorBoard
+```
+./isaaclab.sh -p -m tensorboard.main --logdir logs/skrl/
+```
+
 ## License
 
 The Isaac Lab framework is released under [BSD-3 License](LICENSE). The `isaaclab_mimic` extension and its corresponding standalone scripts are released under [Apache 2.0](LICENSE-mimic). The license files of its dependencies and assets are present in the [`docs/licenses`](docs/licenses) directory.
