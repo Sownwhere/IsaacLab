@@ -86,6 +86,7 @@ class Trainer:
             if config.torch.rank:
                 self.disable_progressbar = True
 
+
     def __str__(self) -> str:
         """Generate a string representation of the trainer
 
@@ -180,7 +181,6 @@ class Trainer:
 
         # reset env
         states, infos = self.env.reset()
-
         for timestep in tqdm.tqdm(
             range(self.initial_timestep, self.timesteps), disable=self.disable_progressbar, file=sys.stdout
         ):

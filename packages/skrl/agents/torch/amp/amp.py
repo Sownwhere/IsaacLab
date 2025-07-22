@@ -142,15 +142,23 @@ class AMP(Agent):
         )
 
         self.amp_observation_space = amp_observation_space
+        print("self.amp_observation_space", self.amp_observation_space)
         self.motion_dataset = motion_dataset
+        print("self.motion_dataset", self.motion_dataset)
         self.reply_buffer = reply_buffer
+        print("self.reply_buffer", self.reply_buffer)
         self.collect_reference_motions = collect_reference_motions
+        print("self.collect_reference_motions", self.collect_reference_motions)
         self.collect_observation = collect_observation
+        print("self.collect_observation", self.collect_observation)
 
         # models
         self.policy = self.models.get("policy", None)
+        print("self.policy", self.policy)
         self.value = self.models.get("value", None)
+        print("self.value", self.value)
         self.discriminator = self.models.get("discriminator", None)
+        print("self.discriminator", self.discriminator)
 
         # checkpoint models
         self.checkpoint_modules["policy"] = self.policy
@@ -188,6 +196,7 @@ class AMP(Agent):
         self._state_preprocessor = self.cfg["state_preprocessor"]
         self._value_preprocessor = self.cfg["value_preprocessor"]
         self._amp_state_preprocessor = self.cfg["amp_state_preprocessor"]
+        print("self._amp_state_preprocessor",self._amp_state_preprocessor)
 
         self._discount_factor = self.cfg["discount_factor"]
         self._lambda = self.cfg["lambda"]
@@ -244,6 +253,7 @@ class AMP(Agent):
             self._value_preprocessor = self._empty_preprocessor
 
         if self._amp_state_preprocessor:
+            print("AMP state preprocessor", self.cfg["amp_state_preprocessor_kwargs"]) 
             self._amp_state_preprocessor = self._amp_state_preprocessor(**self.cfg["amp_state_preprocessor_kwargs"])
             self.checkpoint_modules["amp_state_preprocessor"] = self._amp_state_preprocessor
         else:
@@ -253,6 +263,7 @@ class AMP(Agent):
         """Initialize the agent"""
         super().init(trainer_cfg=trainer_cfg)
         self.set_mode("eval")
+        # print("self.amp_observation_space",self.amp_observation_space)
 
         # create tensors in memory
         if self.memory is not None:
@@ -286,12 +297,16 @@ class AMP(Agent):
 
         # create tensors for motion dataset and reply buffer
         if self.motion_dataset is not None:
+            print("self.motion_dataset is not None:")
             self.motion_dataset.create_tensor(name="states", size=self.amp_observation_space, dtype=torch.float32)
             self.reply_buffer.create_tensor(name="states", size=self.amp_observation_space, dtype=torch.float32)
 
             # initialize motion dataset
             for _ in range(math.ceil(self.motion_dataset.memory_size / self._amp_batch_size)):
                 self.motion_dataset.add_samples(states=self.collect_reference_motions(self._amp_batch_size))
+
+        else:
+            print("self.motion_dataset is None:")
 
         # create temporary variables needed for storage and computation
         self._current_log_prob = None
@@ -313,6 +328,7 @@ class AMP(Agent):
         # use collected states
         if self._current_states is not None:
             states = self._current_states
+
 
         states = self._state_preprocessor(states)
 
@@ -370,7 +386,10 @@ class AMP(Agent):
         )
 
         if self.memory is not None:
+            # print("infos", infos)
+            # print("-----------infos amp_obs ----------- ",infos["amp_obs"].shape)
             amp_states = infos["amp_obs"]
+            # print("-----------amp_states ----------- ",amp_states.shape)
 
             # reward shaping
             if self._rewards_shaper is not None:
@@ -393,6 +412,20 @@ class AMP(Agent):
                     next_values *= infos["terminate"].view(-1, 1).logical_not()  # compatibility with IsaacGymEnvs
                 else:
                     next_values *= terminated.view(-1, 1).logical_not()
+
+
+
+            # print("-----------infos ----------- ")
+            # print("states:", states.shape)
+            # print("actions:", actions.shape)
+            # print("rewards:", rewards.shape)
+            # print("next_states:", next_states.shape)
+            # print("terminated:", terminated.shape)
+            # print("truncated:", truncated.shape)
+            # print("log_prob:", self._current_log_prob.shape)
+            # print("values:", values.shape)
+            # print("amp_states:", amp_states.shape)
+            # print("next_values:", next_values.shape)
 
             self.memory.add_samples(
                 states=states,
@@ -509,16 +542,21 @@ class AMP(Agent):
         # compute combined rewards
         rewards = self.memory.get_tensor_by_name("rewards")
         amp_states = self.memory.get_tensor_by_name("amp_states")
-
+        # print("amp_states: ",amp_states.shape)
+        # print("self._amp_state_preprocessor(amp_states) shape",self._amp_state_preprocessor(amp_states).shape )
         with torch.no_grad(), torch.autocast(device_type=self._device_type, enabled=self._mixed_precision):
             amp_logits, _, _ = self.discriminator.act(
                 {"states": self._amp_state_preprocessor(amp_states)}, role="discriminator"
             )
+            # print("amp_logits.shape", amp_logits.shape)
             style_reward = -torch.log(
                 torch.maximum(1 - 1 / (1 + torch.exp(-amp_logits)), torch.tensor(0.0001, device=self.device))
             )
             style_reward *= self._discriminator_reward_scale
+            # print("style_reward",style_reward.shape)
             style_reward = style_reward.view(rewards.shape)
+            # print("style_reward",style_reward.shape)
+            # print("rewards",rewards.shape)
 
         combined_rewards = self._task_reward_weight * rewards + self._style_reward_weight * style_reward
 
@@ -608,6 +646,7 @@ class AMP(Agent):
                     # compute value loss
                     predicted_values, _, _ = self.value.act({"states": sampled_states}, role="value")
 
+                    print("self._clip_predicted_values", self._clip_predicted_values)
                     if self._clip_predicted_values:
                         predicted_values = sampled_values + torch.clip(
                             predicted_values - sampled_values, min=-self._value_clip, max=self._value_clip
@@ -615,6 +654,7 @@ class AMP(Agent):
                     value_loss = self._value_loss_scale * F.mse_loss(sampled_returns, predicted_values)
 
                     # compute discriminator loss
+                    print("self._discriminator_batch_size", self._discriminator_batch_size)
                     if self._discriminator_batch_size:
                         sampled_amp_states = self._amp_state_preprocessor(
                             sampled_amp_states[0 : self._discriminator_batch_size], train=True

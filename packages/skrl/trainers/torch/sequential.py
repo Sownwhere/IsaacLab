@@ -60,6 +60,7 @@ class SequentialTrainer(Trainer):
             self.agents.init(trainer_cfg=self.cfg)
 
     def train(self) -> None:
+        print("Training...")
         """Train the agents sequentially
 
         This method executes the following steps in loop:
@@ -86,7 +87,9 @@ class SequentialTrainer(Trainer):
                 self.single_agent_train()
             # multi-agent
             else:
+                print("multi_agent_train")
                 self.multi_agent_train()
+                print("finished_agent_train")
             return
 
         # reset env
