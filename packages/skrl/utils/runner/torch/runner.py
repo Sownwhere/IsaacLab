@@ -222,6 +222,7 @@ class Runner:
         action_spaces = env.action_spaces if multi_agent else {"agent": env.action_space}
 
         agent_class = cfg.get("agent", {}).get("class", "").lower()
+        # print("1111agent_class",cfg)
 
         # instantiate models
         
@@ -258,17 +259,19 @@ class Runner:
                     if not model_class_name:
                         raise ValueError(f"No 'class' field defined in 'models:{role}' cfg")
                     model_class = self._component(model_class_name)
+
                     # get specific spaces according to agent/model cfg
                     observation_space = observation_spaces[agent_id]
-                    if agent_class == "mappo" and role == "value":
-                        observation_space = state_spaces[agent_id]  
-                    if agent_class == "mappo" and role == "discriminator":
+
+                    # print(f"=========================================={agent_class}===================================================")
+                    if agent_id == "humanoid" and role == "discriminator":
                         try:
                             observation_space = env.amp_observation_space
                         except Exception as e:
                             logger.warning(
                                 "Unable to get AMP space via 'env.amp_observation_space'. Using 'env.observation_space' instead"
                             )
+                        # print("observation_space",observation_space)
                     # print model source
                     source = model_class(
                         observation_space=observation_space,
@@ -463,7 +466,10 @@ class Runner:
 
         
         # amp_state_preprocessor_kwargs
+        # print(f"Processing amp_state_preprocessor: {agent_cfg}" )
+
         agent_cfg["AMP"]["amp_state_preprocessor_kwargs"].update({"size": amp_observation_space, "device": device})
+        # print(f"Processing amp_state_preprocessor:" ,agent_cfg["AMP"]["amp_state_preprocessor_kwargs"])
 
         motion_dataset = None
         if cfg.get("motion_dataset"):

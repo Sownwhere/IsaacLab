@@ -114,8 +114,11 @@ class IsaacLabMultiAgentWrapper(MultiAgentEnvWrapper):
         :return: Observation, reward, terminated, truncated, info
         :rtype: tuple of dictionaries torch.Tensor and any other info
         """
+        # print("[Env 0]: Performing step...")
         actions = {k: unflatten_tensorized_space(self.action_spaces[k], v) for k, v in actions.items()}
         observations, rewards, terminated, truncated, self._info = self._env.step(actions)
+
+        # print("[Env 0]: self._info.shape: ", self._info["amp_obs"].shape)
         self._observations = {
             k: flatten_tensorized_space(tensorize_space(self.observation_spaces[k], v)) for k, v in observations.items()
         }

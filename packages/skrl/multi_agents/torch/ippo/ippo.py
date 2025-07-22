@@ -131,41 +131,61 @@ class IPPO(MultiAgent):
                         self.values[uid].broadcast_parameters()
 
         # configuration
+        print("configuration: ",self.cfg)
         self._learning_epochs = self._as_dict(self.cfg["learning_epochs"])
+        print("self.cfg:learning_epochs: ",self.cfg["learning_epochs"])
+        #print("ccc"*10,self._learning_epochs)
         self._mini_batches = self._as_dict(self.cfg["mini_batches"])
+        print("self.cfg:mini_batches: ",self.cfg["mini_batches"])
+        #print("self._mini_batches",self._mini_batches)
         self._rollouts = self.cfg["rollouts"]
+        #print("self._rollouts",self._rollouts)
         self._rollout = 0
 
         self._grad_norm_clip = self._as_dict(self.cfg["grad_norm_clip"])
+        #print("self._grad_norm_clip",self._grad_norm_clip)
         self._ratio_clip = self._as_dict(self.cfg["ratio_clip"])
+        #print("self._ratio_clip",self._ratio_clip)
         self._value_clip = self._as_dict(self.cfg["value_clip"])
+        #print("self._value_clip",self._value_clip)
         self._clip_predicted_values = self._as_dict(self.cfg["clip_predicted_values"])
-
+        #print("self._clip_predicted_values",self._clip_predicted_values)
         self._value_loss_scale = self._as_dict(self.cfg["value_loss_scale"])
+        #print("self._value_loss_scale",self._value_loss_scale)
         self._entropy_loss_scale = self._as_dict(self.cfg["entropy_loss_scale"])
-
+        #print("self._entropy_loss_scale",self._entropy_loss_scale)
         self._kl_threshold = self._as_dict(self.cfg["kl_threshold"])
-
+        #print("self._kl_threshold",self._kl_threshold)
         self._learning_rate = self._as_dict(self.cfg["learning_rate"])
+        #print("self._learning_rate",self._learning_rate)
         self._learning_rate_scheduler = self._as_dict(self.cfg["learning_rate_scheduler"])
+        #print("self._learning_rate_scheduler",self._learning_rate_scheduler)
         self._learning_rate_scheduler_kwargs = self._as_dict(self.cfg["learning_rate_scheduler_kwargs"])
-
+        #print("self._learning_rate_scheduler_kwargs",self._learning_rate_scheduler_kwargs)    
         self._state_preprocessor = self._as_dict(self.cfg["state_preprocessor"])
+        #print("self._state_preprocessor",self._state_preprocessor)
         self._state_preprocessor_kwargs = self._as_dict(self.cfg["state_preprocessor_kwargs"])
+        print("self._state_preprocessor_kwargs",self._state_preprocessor_kwargs)
         self._value_preprocessor = self._as_dict(self.cfg["value_preprocessor"])
+        #print("self._value_preprocessor",self._value_preprocessor)
         self._value_preprocessor_kwargs = self._as_dict(self.cfg["value_preprocessor_kwargs"])
-
+        #print("self._value_preprocessor_kwargs",self._value_preprocessor_kwargs)
         self._discount_factor = self._as_dict(self.cfg["discount_factor"])
+        #print("self._discount_factor",self._discount_factor)
         self._lambda = self._as_dict(self.cfg["lambda"])
-
+        #print("self._lambda",self._lambda)
         self._random_timesteps = self.cfg["random_timesteps"]
+        #print("self._random_timesteps",self._random_timesteps)
         self._learning_starts = self.cfg["learning_starts"]
+        #print("self._learning_starts",self._learning_starts)
 
         self._rewards_shaper = self.cfg["rewards_shaper"]
+        #print("self._rewards_shaper",self._rewards_shaper)
         self._time_limit_bootstrap = self._as_dict(self.cfg["time_limit_bootstrap"])
-
+        #print("self._time_limit_bootstrap",self._time_limit_bootstrap)    
         self._mixed_precision = self.cfg["mixed_precision"]
-
+        #print("self._mixed_precision",self._mixed_precision)
+         
         # set up automatic mixed precision
         self._device_type = torch.device(device).type
         if version.parse(torch.__version__) >= version.parse("2.4"):
