@@ -135,8 +135,10 @@ Isaac Lab development initiated from the [Orbit](https://isaac-orbit.github.io/)
 
 gdp@gdp:~/IsaacLab$ conda activate env_isaaclab
 
-
+## 替换模型和轨迹的amp
 (env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Bw
+## 运行包含外骨骼的多智能体amp
+(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task hexo --algorithm MAAMP
 
 
 (env_isaaclab) gdp@gdp:~/IsaacLab$ tensorboard --logdir=/home/gdp/IsaacLab/logs/skrl/bw_amp_walk/2025-07-01_09-46-49_ppo_torch --port=6006
