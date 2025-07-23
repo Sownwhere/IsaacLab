@@ -646,7 +646,7 @@ class AMP(Agent):
                     # compute value loss
                     predicted_values, _, _ = self.value.act({"states": sampled_states}, role="value")
 
-                    print("self._clip_predicted_values", self._clip_predicted_values)
+                    # print("self._clip_predicted_values", self._clip_predicted_values)
                     if self._clip_predicted_values:
                         predicted_values = sampled_values + torch.clip(
                             predicted_values - sampled_values, min=-self._value_clip, max=self._value_clip
@@ -654,7 +654,7 @@ class AMP(Agent):
                     value_loss = self._value_loss_scale * F.mse_loss(sampled_returns, predicted_values)
 
                     # compute discriminator loss
-                    print("self._discriminator_batch_size", self._discriminator_batch_size)
+                    # print("self._discriminator_batch_size", self._discriminator_batch_size)
                     if self._discriminator_batch_size:
                         sampled_amp_states = self._amp_state_preprocessor(
                             sampled_amp_states[0 : self._discriminator_batch_size], train=True

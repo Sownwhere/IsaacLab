@@ -72,6 +72,7 @@ from packaging import version
 
 # check for minimum supported skrl version
 SKRL_VERSION = "1.4.2"
+print("version.parse(skrl.__version__)", skrl.__version__)
 if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
     skrl.logger.error(
         f"Unsupported skrl version: {skrl.__version__}. "
