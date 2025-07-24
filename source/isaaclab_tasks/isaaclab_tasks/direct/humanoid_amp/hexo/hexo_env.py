@@ -69,7 +69,7 @@ class HexoEnv(DirectMARLEnv):
         self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
         self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
         self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
-        print("self.motion_key_body_indexes: " ,self.motion_key_body_indexes)
+        # print("self.motion_key_body_indexes: " ,self.motion_key_body_indexes)
         # reconfigure AMP observation space according to the number of observations and create the buffer
         self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space
         self.amp_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.amp_observation_size,))
@@ -89,17 +89,22 @@ class HexoEnv(DirectMARLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-    def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
+    def _pre_physics_step(self, actions: dict[str, torch.Tensor]):
         self.actions = {k: v.clone() for k, v in actions.items()}
 
 
-    def _apply_action(self) -> None:
+    def _apply_action(self):
         self.robot.set_joint_effort_target(
             self.actions["humanoid"] * self.cfg.humanoid_action_scale, joint_ids=self._humanoid_dof_idx
         )
+        # print("humanoid self.actions shape ",self.actions["humanoid"][0])
+         # set all actions["exo"] are zero
+        self.actions["exo"] *= 0  
         self.robot.set_joint_effort_target(
             self.actions["exo"] * self.cfg.exo_action_scale, joint_ids=self._exo_dof_idx
         )
+    
+
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
         # humanoid：使用 compute_obs 获取完整观测
@@ -157,40 +162,24 @@ class HexoEnv(DirectMARLEnv):
         return total_reward
 
     def _get_dones(self) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-        self.joint_pos = self.robot.data.joint_pos
-        self.joint_vel = self.robot.data.joint_vel
+        time_out = self.episode_length_buf >= self.max_episode_length - 1  # shape: [num_envs]
 
-        time_out = self.episode_length_buf >= self.max_episode_length - 1
-        out_of_bounds = torch.any(torch.abs(self.joint_pos[:, self._humanoid_dof_idx]) > 100, dim=1)
+        # 初始化字典
+        terminated = {}
+
+        # humanoid 的 early termination 判断
+        if self.cfg.early_termination:
+            terminated["humanoid"] = self.robot.data.body_pos_w[:, self.ref_body_index, 2] < self.cfg.termination_height
+        else:
+            terminated["humanoid"] = torch.zeros_like(time_out, dtype=torch.bool)
 
 
-        terminated = {agent: out_of_bounds for agent in self.cfg.possible_agents}
-        time_outs = {agent: time_out for agent in self.cfg.possible_agents}
+        terminated["exo"] = terminated["humanoid"]
+
+        # 所有 agent 的 time_out 都一样
+        time_outs = {agent: time_out.clone() for agent in self.cfg.possible_agents}
+
         return terminated, time_outs
-
-    # def _reset_idx(self, env_ids: Sequence[int] | None):
-    #     if env_ids is None:
-    #         env_ids = self.robot._ALL_INDICES
-    #     super()._reset_idx(env_ids)
-
-    #     joint_pos = self.robot.data.default_joint_pos[env_ids]
-    #     joint_pos[:, self._exo_dof_idx] += sample_uniform(
-    #         self.cfg.initial_exo_angle_range[0] * math.pi,
-    #         self.cfg.initial_exo_angle_range[1] * math.pi,
-    #         joint_pos[:, self._exo_dof_idx].shape,
-    #         joint_pos.device,
-    #     )
-    #     joint_vel = self.robot.data.default_joint_vel[env_ids]
-
-    #     default_root_state = self.robot.data.default_root_state[env_ids]
-    #     default_root_state[:, :3] += self.scene.env_origins[env_ids]
-
-    #     self.joint_pos[env_ids] = joint_pos
-    #     self.joint_vel[env_ids] = joint_vel
-
-    #     self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
-    #     self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
-    #     self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
 
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
@@ -210,6 +199,13 @@ class HexoEnv(DirectMARLEnv):
         self.robot.write_root_link_pose_to_sim(root_state[:, :7], env_ids)
         self.robot.write_root_com_velocity_to_sim(root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
+    
+    def _reset_strategy_default(self, env_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        root_state = self.robot.data.default_root_state[env_ids].clone()
+        root_state[:, :3] += self.scene.env_origins[env_ids]
+        joint_pos = self.robot.data.default_joint_pos[env_ids].clone()
+        joint_vel = self.robot.data.default_joint_vel[env_ids].clone()
+        return root_state, joint_pos, joint_vel
 
     def _reset_strategy_random(
         self, env_ids: torch.Tensor, start: bool = False
