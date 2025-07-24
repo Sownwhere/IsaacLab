@@ -103,8 +103,14 @@ class MultiAgentSuper:
         self.checkpoint_best_modules = {"timestep": 0, "reward": -(2**31), "saved": False, "modules": {}}
 
         # experiment directory
-        directory = self.cfg.get("experiment", {}).get("directory", "")
-        experiment_name = self.cfg.get("experiment", {}).get("experiment_name", "")
+        # if use MAAMP need to get AMP agent first
+        if self.cfg.get("experiment") is None:
+            directory = self.cfg.get("AMP", {}).get("experiment", {}).get("directory", "")
+            experiment_name = self.cfg.get("AMP", {}).get("experiment", {}).get("experiment_name", "")
+        else:
+            directory = self.cfg.get("experiment", {}).get("directory", "")
+            experiment_name = self.cfg.get("experiment", {}).get("experiment_name", "")
+
         if not directory:
             directory = os.path.join(os.getcwd(), "runs")
         if not experiment_name:
@@ -531,7 +537,6 @@ class MultiAgentSuper:
                 }
             # write checkpoints
             self.write_checkpoint(timestep, timesteps)
-
         # write to tensorboard
         if timestep > 1 and self.write_interval > 0 and not timestep % self.write_interval:
             self.write_tracking_data(timestep, timesteps)
