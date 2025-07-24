@@ -143,18 +143,8 @@ class MAAMP(MultiAgentSuper):
         reply_buffer: Optional[Memory] = None,
         collect_reference_motions: Optional[Callable[[int], torch.Tensor]] = None,
         collect_observation: Optional[Callable[[], torch.Tensor]] = None,
-        # memory: Optional[Union[Memory, Tuple[Memory]]] = None,
-        # observation_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
-        # action_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
-        # amp_observation_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
-        # motion_dataset: Optional[Memory] = None,
-        # reply_buffer: Optional[Memory] = None,
-        # collect_reference_motions: Optional[Callable[[int], torch.Tensor]] = None,
-        # collect_observation: Optional[Callable[[], torch.Tensor]] = None,
+
     ) -> None:
-        # 解析模式：PPO / AMP
-        # self.mode = cfg.get("mode", "PPO").upper() if cfg else "PPO"
-        # assert self.mode in ["PPO", "AMP"], f"Unsupported mode: {self.mode}"
 
         _cfg = copy.deepcopy(MAAMP_DEFAULT_CONFIG)
         _cfg.update(cfg if cfg is not None else {})
@@ -193,7 +183,7 @@ class MAAMP(MultiAgentSuper):
                     self.discriminator[uid].broadcast_parameters()      
 
         # configuration
-        print("Configuration:")
+        # print("Configuration:")
         # print(self.cfg)
         self._ppo_learning_epochs = self.cfg["PPO"]["learning_epochs"]
         self._ppo_mini_batches = self.cfg["PPO"]["mini_batches"]
@@ -384,7 +374,7 @@ class MAAMP(MultiAgentSuper):
         """Initialize the agent"""
         super().init(trainer_cfg=trainer_cfg)
         self.set_mode("eval")
-        print("self.amp_observation_space",self.amp_observation_space)
+        # print("self.amp_observation_space",self.amp_observation_space)
         # create tensors in memories
         if self.memories:
             for uid in self.possible_agents:
@@ -740,12 +730,12 @@ class MAAMP(MultiAgentSuper):
             amp_logits, _, _ = self.discriminator["humanoid"].act(
                 {"states": self._amp_amp_state_preprocessor(amp_states)}, role="discriminator"
             )
-            print("amp_logits.shape", amp_logits.shape)
+            # print("amp_logits.shape", amp_logits.shape)
             style_reward = -torch.log(
                 torch.maximum(1 - 1 / (1 + torch.exp(-amp_logits)), torch.tensor(0.0001, device=self.device))
             )
-            print("style_reward",style_reward.shape)
-            print("self._amp_discriminator_reward_scale",self._amp_discriminator_reward_scale)
+            # print("style_reward",style_reward.shape)
+            # print("self._amp_discriminator_reward_scale",self._amp_discriminator_reward_scale)
             style_reward *= self._amp_discriminator_reward_scale
             style_reward = style_reward.view(rewards.shape)
 

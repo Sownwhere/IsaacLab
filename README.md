@@ -96,9 +96,6 @@ ln -s ~/IsaacLab/scripts/reinforcement_learning/skrl ~/IsaacLab/
 ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Bw --headless
 or
 
-./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Isaac-G1-AMP-Dance-Direct-v0 --headless
-
-or 
 ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task hexo --algorithm MAAMP --headless
 ```
 ### Eval
