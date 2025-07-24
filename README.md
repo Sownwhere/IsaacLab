@@ -79,6 +79,12 @@ Join us in building a vibrant, collaborative ecosystem where creativity and tech
 contributions can make a significant impact on the Isaac Lab community and beyond!
 
 ## Start
+
+```
+conda activate env_isaaclab
+cd IsaacLab
+export PYTHONPATH=~/IsaacLab/packages:$PYTHONPATH
+```
 ### Symbolic Links
 ```
 ln -s ~/IsaacLab/source/isaaclab_tasks/isaaclab_tasks/direct/humanoid_amp ~/IsaacLab/
@@ -87,18 +93,26 @@ ln -s ~/IsaacLab/scripts/reinforcement_learning/skrl ~/IsaacLab/
 ```
 ### Train
 ```
-./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Isaac-G1-AMP-Walk-Direct-v0 --headless
+./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Bw --headless
 or
 
 ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Isaac-G1-AMP-Dance-Direct-v0 --headless
+
+or 
+./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task hexo --algorithm MAAMP --headless
 ```
 ### Eval
 ```
-./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task Isaac-G1-AMP-Walk-Direct-v0 --num_envs 32 
+./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task Bw --num_envs 32 
 ```
 ### TensorBoard
 ```
 ./isaaclab.sh -p -m tensorboard.main --logdir logs/skrl/
+```
+
+### skrl location 
+```
+export PYTHONPATH=~/IsaacLab/packages:$PYTHONPATH
 ```
 
 ## License
