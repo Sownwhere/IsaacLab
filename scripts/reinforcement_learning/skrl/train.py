@@ -139,7 +139,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if "class" in agent_cfg["agent"]:
         log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"]["experiment"]["directory"])
     else:
-        agent_key = list(agent_cfg["agent"].keys())[0]  # 例如 "humanoid"
+        agent_key = list(agent_cfg["agent"].keys())[1]  # 例如 "humanoid"
+        # print(f"angent_key : {agent_key}")
         log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"][agent_key]["experiment"]["directory"])
 
     
@@ -171,6 +172,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     dump_pickle(os.path.join(log_dir, "params", "agent.pkl"), agent_cfg)
 
     # get checkpoint path (to resume training)
+
     resume_path = retrieve_file_path(args_cli.checkpoint) if args_cli.checkpoint else None
     # print(f"env_cfg : {env_cfg}")
     # create isaac environment
