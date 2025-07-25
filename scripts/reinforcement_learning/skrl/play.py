@@ -17,6 +17,7 @@ import argparse
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
+
 parser = argparse.ArgumentParser(description="Play a checkpoint of an RL agent from skrl.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
@@ -42,7 +43,7 @@ parser.add_argument(
     "--algorithm",
     type=str,
     default="PPO",
-    choices=["AMP", "PPO", "IPPO", "MAPPO"],
+    choices=["AMP", "PPO", "IPPO", "MAPPO","MAAMP"],
     help="The RL algorithm used for training the skrl agent.",
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
@@ -112,11 +113,25 @@ def main():
     except ValueError:
         experiment_cfg = load_cfg_from_registry(args_cli.task, "skrl_cfg_entry_point")
 
+
+    # print(f"experiment_cfg: {experiment_cfg}")
+    # if isinstance(experiment_cfg, dict) and experiment_cfg.get("experiment") is None:
+    #     print("[INFO] No experiment configuration found. Using default configuration.")
+    # print("[INFO] Using skrl configuration: ",experiment_cfg.get("agent",{}))
+    # if isinstance(experiment_cfg, dict) and experiment_cfg.get("agent",{}).get("AMP",{}).get("experiment") is not None:
+    #     print("[INFO] Using humanoid experiment configuration.")    
+
+    if not isinstance(experiment_cfg, dict):
+        print("[WARNING] Experiment configuration is not a dictionary. Using default configuration.")
+        return
     # specify directory for logging experiments (load checkpoint)
     log_root_path = os.path.join("logs", "skrl", experiment_cfg["agent"]["experiment"]["directory"])
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Loading experiment from directory: {log_root_path}")
     # get checkpoint path
+    # print("args_cli.use_pretrained_checkpoint",args_cli.use_pretrained_checkpoint)
+    # print("args_cli.checkpoint",args_cli.checkpoint)
+    # print("algorithm",algorithm)
     if args_cli.use_pretrained_checkpoint:
         resume_path = get_published_pretrained_checkpoint("skrl", args_cli.task)
         if not resume_path:
@@ -160,6 +175,7 @@ def main():
 
     # configure and instantiate the skrl runner
     # https://skrl.readthedocs.io/en/latest/api/utils/runner.html
+
     experiment_cfg["trainer"]["close_environment_at_exit"] = False
     experiment_cfg["agent"]["experiment"]["write_interval"] = 0  # don't log to TensorBoard
     experiment_cfg["agent"]["experiment"]["checkpoint_interval"] = 0  # don't generate checkpoints
@@ -183,7 +199,15 @@ def main():
             outputs = runner.agent.act(obs, timestep=0, timesteps=0)
             # - multi-agent (deterministic) actions
             if hasattr(env, "possible_agents"):
+       
                 actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
+                # 将actions 的第一项全零
+ 
+                # actions["exo"] = torch.zeros_like(actions["exo"])
+                # print(f"actions: {actions}")
+
+            
+                
             # - single-agent (deterministic) actions
             else:
                 actions = outputs[-1].get("mean_actions", outputs[0])
