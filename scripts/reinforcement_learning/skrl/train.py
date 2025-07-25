@@ -136,12 +136,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env_cfg.seed = agent_cfg["seed"]
 
     # specify directory for logging experiments
-    if "class" in agent_cfg["agent"]:
-        log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"]["experiment"]["directory"])
-    else:
-        agent_key = list(agent_cfg["agent"].keys())[1]  # 例如 "humanoid"
-        # print(f"angent_key : {agent_key}")
-        log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"][agent_key]["experiment"]["directory"])
+
+    log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"]["experiment"]["directory"])
 
     
     log_root_path = os.path.abspath(log_root_path)
@@ -150,18 +146,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_{algorithm}_{args_cli.ml_framework}"
     # The Ray Tune workflow extracts experiment name using the logging line below, hence, do not change it (see PR #2346, comment-2819298849)
     print(f"Exact experiment name requested from command line: {log_dir}")
-    if "class" in agent_cfg["agent"]:
-        if agent_cfg["agent"]["experiment"]["experiment_name"]:
-            log_dir += f'_{agent_cfg["agent"]["experiment"]["experiment_name"]}'
-        # set directory into agent config
-        agent_cfg["agent"]["experiment"]["directory"] = log_root_path
-        agent_cfg["agent"]["experiment"]["experiment_name"] = log_dir
-    else:
-        if agent_cfg["agent"][agent_key]["experiment"]["experiment_name"]:
-            log_dir += f'_{agent_cfg["agent"][agent_key]["experiment"]["experiment_name"]}'
-        # set directory into agent config
-        agent_cfg["agent"][agent_key]["experiment"]["directory"] = log_root_path
-        agent_cfg["agent"][agent_key]["experiment"]["experiment_name"] = log_dir
+
+    if agent_cfg["agent"]["experiment"]["experiment_name"]:
+        log_dir += f'_{agent_cfg["agent"]["experiment"]["experiment_name"]}'
+    # set directory into agent config
+    agent_cfg["agent"]["experiment"]["directory"] = log_root_path
+    agent_cfg["agent"]["experiment"]["experiment_name"] = log_dir
+    
     # update log_dir
     log_dir = os.path.join(log_root_path, log_dir)
 
@@ -200,11 +191,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if hasattr(env, "env") and hasattr(env.env, "collect_reference_motions"):
         env.collect_reference_motions = lambda num_samples, current_times=None: env.env.collect_reference_motions(num_samples, current_times)
         
-    print("collect_reference_motions in env?", hasattr(env, "collect_reference_motions"))
+    # print("collect_reference_motions in env?", hasattr(env, "collect_reference_motions"))
 
     # configure and instantiate the skrl runner
     # https://skrl.readthedocs.io/en/latest/api/utils/runner.html
-    print("Loaded yam file, agent_cfg: ",agent_cfg)
+    # print("Loaded yam file, agent_cfg: ",agent_cfg)
     runner = Runner(env, agent_cfg)
 
     # load checkpoint (if specified)
