@@ -104,12 +104,12 @@ class MultiAgentSuper:
 
         # experiment directory
         # if use MAAMP need to get AMP agent first
-        if self.cfg.get("experiment") is None:
-            directory = self.cfg.get("AMP", {}).get("experiment", {}).get("directory", "")
-            experiment_name = self.cfg.get("AMP", {}).get("experiment", {}).get("experiment_name", "")
-        else:
-            directory = self.cfg.get("experiment", {}).get("directory", "")
-            experiment_name = self.cfg.get("experiment", {}).get("experiment_name", "")
+        # if self.cfg.get("experiment") is None:
+        #     directory = self.cfg.get("AMP", {}).get("experiment", {}).get("directory", "")
+        #     experiment_name = self.cfg.get("AMP", {}).get("experiment", {}).get("experiment_name", "")
+        # else:
+        directory = self.cfg.get("experiment", {}).get("directory", "")
+        experiment_name = self.cfg.get("experiment", {}).get("experiment_name", "")
 
         if not directory:
             directory = os.path.join(os.getcwd(), "runs")
@@ -276,6 +276,7 @@ class MultiAgentSuper:
         """
         tag = str(timestep if timestep is not None else datetime.datetime.now().strftime("%y-%m-%d_%H-%M-%S-%f"))
         # separated modules
+        # print("self.checkpoint_store_separately",self.checkpoint_store_separately)
         if self.checkpoint_store_separately:
             for uid in self.possible_agents:
                 for name, module in self.checkpoint_modules[uid].items():
@@ -289,6 +290,8 @@ class MultiAgentSuper:
                 uid: {name: self._get_internal_value(module) for name, module in self.checkpoint_modules[uid].items()}
                 for uid in self.possible_agents
             }
+            # path = os.path.join(self.experiment_dir, "checkpoints", f"agent_{tag}.pt")
+            # print("path",path)
             torch.save(modules, os.path.join(self.experiment_dir, "checkpoints", f"agent_{tag}.pt"))
 
         # best modules
@@ -439,6 +442,7 @@ class MultiAgentSuper:
             for uid in self.possible_agents
         }
         torch.save(modules, path)
+
 
     def load(self, path: str) -> None:
         """Load the model from the specified path
