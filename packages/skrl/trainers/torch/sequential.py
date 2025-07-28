@@ -87,9 +87,9 @@ class SequentialTrainer(Trainer):
                 self.single_agent_train()
             # multi-agent
             else:
-                print("***zhhw self.num_simultaneous_agents: ",self.num_simultaneous_agents )
+                # print("***zhhw self.num_simultaneous_agents: ",self.num_simultaneous_agents )
                 self.multi_agent_train() # use this 运行此处
-                print("finished_agent_train")
+                # print("finished_agent_train")
             return
 
         # reset env
