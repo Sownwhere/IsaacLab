@@ -101,6 +101,8 @@ or
 ### Eval
 ```
 ./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task Bw --num_envs 32 
+
+./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task hexo --algorithm MAAMP  --num_envs 32 
 ```
 ### TensorBoard
 ```
@@ -133,6 +135,10 @@ Isaac Lab development initiated from the [Orbit](https://isaac-orbit.github.io/)
 }
 ```
 
+
+## Gdp Cmds
+
+```
 gdp@gdp:~/IsaacLab$ conda activate env_isaaclab
 
 
@@ -154,6 +160,6 @@ gdp@gdp:~/IsaacLab$ conda activate env_isaaclab
 
 --algorithm
 MAAMP
-
+```
 
 
