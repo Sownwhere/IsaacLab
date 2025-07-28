@@ -9,14 +9,12 @@ import gymnasium as gym
 import numpy as np
 import math
 import torch
-from collections.abc import Sequence
 
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectMARLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
-from isaaclab.utils.math import sample_uniform
 from isaaclab.utils.math import quat_rotate
 
 from .hexo_env_cfg import HexoEnvCfg
@@ -39,8 +37,9 @@ class HexoEnv(DirectMARLEnv):
         dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
         self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
         self.action_scale = dof_upper_limits - dof_lower_limits
+        print("self.action_scale:", self.action_scale)
 
-        # load motion
+        #load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
 
         print("self._motion_loader:", self._motion_loader)
@@ -80,7 +79,16 @@ class HexoEnv(DirectMARLEnv):
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
         # add ground plane
-        spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
+        spawn_ground_plane(
+            prim_path="/World/ground",
+            cfg=GroundPlaneCfg(
+                physics_material=sim_utils.RigidBodyMaterialCfg(
+                    static_friction=1.0,
+                    dynamic_friction=1.0,
+                    restitution=0.0,
+                ),
+            ),
+        )
         # clone and replicate
         self.scene.clone_environments(copy_from_source=False)
         # add articulation to scene
@@ -95,13 +103,13 @@ class HexoEnv(DirectMARLEnv):
 
     def _apply_action(self):
         self.robot.set_joint_effort_target(
-            self.actions["humanoid"] * self.cfg.humanoid_action_scale, joint_ids=self._humanoid_dof_idx
+            self.actions["humanoid"] *self.action_scale + self.action_offset  , joint_ids=self._humanoid_dof_idx
         )
         # print("humanoid self.actions shape ",self.actions["humanoid"][0])
          # set all actions["exo"] are zero
         self.actions["exo"] *= 0  
         self.robot.set_joint_effort_target(
-            self.actions["exo"] * self.cfg.exo_action_scale, joint_ids=self._exo_dof_idx
+            self.actions["exo"] *self.action_scale[10:11] + self.action_offset[10:11] , joint_ids=self._exo_dof_idx
         )
     
 
@@ -151,14 +159,21 @@ class HexoEnv(DirectMARLEnv):
 
     def _get_rewards(self) -> dict[str, torch.Tensor]:
         total_reward = compute_rewards(
-            self.cfg.rew_scale_alive,
-            self.cfg.rew_scale_terminated,
-            self.cfg.rew_scale_humanoid_vel,
-            self.cfg.rew_scale_exo_vel,
-            self.joint_vel[:, self._humanoid_dof_idx[0]],
-            self.joint_vel[:, self._exo_dof_idx[0]],
-            math.prod(self.terminated_dict.values()),
+            self.cfg.rew_termination,
+            self.cfg.rew_action_l2,
+            self.cfg.rew_joint_pos_limits,
+            self.cfg.rew_joint_acc_l2,
+            self.cfg.rew_joint_vel_l2,
+            self.terminated_dict,
+            self.actions,
+            self.robot.data.joint_pos,
+            self.robot.data.soft_joint_pos_limits,
+            self.robot.data.joint_acc,
+            self.robot.data.joint_vel,
+            self.robot.data.body_com_pos_w,
+            self.robot.data.body_com_vel_w,
         )
+ 
         return total_reward
 
     def _get_dones(self) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
@@ -276,25 +291,70 @@ def normalize_angle(angle):
 
 
 @torch.jit.script
-def compute_rewards(
-    rew_scale_alive: float,
-    rew_scale_terminated: float,
-    rew_scale_humanoid_vel: float,
-    rew_scale_exo_vel: float,
-    humanoid_vel: torch.Tensor,
-    exo_vel: torch.Tensor,
-    reset_terminated: torch.Tensor,
-):
-    rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
-    rew_termination = rew_scale_terminated * reset_terminated.float()
+def feet_too_near_humanoid(
+    body_com_pos_w: torch.Tensor,   
+    threshold: float = 0.1
+) -> torch.Tensor:
+    # print("aaaaaaaaaaaaaaaaaaa",body_com_pos_w.shape)
+    # assert joint_pos.shape[-1] == 12
+    distance = torch.norm(body_com_pos_w[:,6, 1] - body_com_pos_w[:, 12, 1], dim=-1)
 
-    rew_humanoid_vel = rew_scale_humanoid_vel * torch.sum(torch.abs(humanoid_vel).unsqueeze(dim=1), dim=-1)
-    rew_exo_vel = rew_scale_exo_vel * torch.sum(torch.abs(exo_vel).unsqueeze(dim=1), dim=-1)
+    return -(threshold - distance).clamp(min=0)
+
+
+
+
+@torch.jit.script
+def feet_slipping(
+    body_com_pos_w: torch.Tensor,
+    body_com_lin_vel_w: torch.Tensor,
+    threshold: float = 0.01
+) -> torch.Tensor:
+    
+    drifting_left = torch.norm( body_com_lin_vel_w[:,6, 0] + body_com_lin_vel_w[:,6, 1],dim=-1)
+    drifting_right = torch.norm( body_com_lin_vel_w[:,12, 0] + body_com_lin_vel_w[:,12, 1],dim=-1)   
+    return -drifting_left*(( threshold - body_com_pos_w[:,6, 2]).clamp(min=0))  - drifting_right*(( threshold - body_com_pos_w[:,12, 2]).clamp(min=0))
+  
+
+@torch.jit.script
+def compute_rewards(
+    rew_scale_termination: float,
+    rew_scale_action_l2: float,
+    rew_scale_joint_pos_limits: float,
+    rew_scale_joint_acc_l2: float,
+    rew_scale_joint_vel_l2: float,
+    terminated_dict: dict[str, torch.Tensor],
+    actions: dict[str, torch.Tensor],
+    joint_pos: torch.Tensor,
+    soft_joint_pos_limits: torch.Tensor,
+    joint_acc: torch.Tensor,
+    joint_vel: torch.Tensor,
+    body_com_pos_w:  torch.Tensor,
+    body_com_lin_vel_w: torch.Tensor,
+
+):
+    rew_slip = feet_slipping( body_com_pos_w, body_com_lin_vel_w)
+    rew_distance = feet_too_near_humanoid(body_com_pos_w)
+
+    rew_termination = rew_scale_termination * terminated_dict["humanoid"].float()
+    rew_action_l2 = rew_scale_action_l2 * torch.sum(torch.square(actions["humanoid"]), dim=1)
+    
+    out_of_limits = -(joint_pos - soft_joint_pos_limits[:,:,0]).clip(max=0.0)
+    out_of_limits += (joint_pos - soft_joint_pos_limits[:,:,1]).clip(min=0.0)
+    rew_joint_pos_limits = rew_scale_joint_pos_limits * torch.sum(out_of_limits, dim=1)
+    
+    rew_joint_acc_l2 = rew_scale_joint_acc_l2 * torch.sum(torch.square(joint_acc), dim=1)
+    rew_joint_vel_l2 = rew_scale_joint_vel_l2 * torch.sum(torch.square(joint_vel), dim=1)
+
+
+
+
 
     total_reward = {
-        "humanoid": rew_alive + rew_termination + rew_humanoid_vel,
-        "exo": rew_alive + rew_termination + rew_exo_vel,
+        "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2 +  rew_distance + rew_slip,
+        "exo":  rew_termination ,
     }
+    total_reward["exo"] =  torch.zeros_like(total_reward["exo"])
     return total_reward
 
 @torch.jit.script
