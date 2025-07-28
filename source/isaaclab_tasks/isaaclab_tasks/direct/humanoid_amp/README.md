@@ -18,7 +18,9 @@ Eval：
 ```
 TensorBoard:
 ```
+
 ./isaaclab.sh -p -m tensorboard.main --logdir logs/skrl/
+
 ```
 The parameters of the code in this repository have not been fine-tuned. Currently, the walk performance is acceptable, but the dance performance is quite poor. Due to personal bussiness, I will not begin to debug until summer.
 
