@@ -163,7 +163,7 @@ class MAAMP(MultiAgentSuper):
         self.values = {uid: self.models[uid].get("value", None) for uid in self.possible_agents}
         self.discriminator = {uid: self.models[uid].get("discriminator", None) for uid in self.possible_agents}
 
-        print(" self.discriminator ",  self.discriminator )
+        # print(" self.discriminator ",  self.discriminator )
         
 
         for uid in self.possible_agents:
@@ -378,7 +378,7 @@ class MAAMP(MultiAgentSuper):
         # create tensors in memories
         if self.memories:
             for uid in self.possible_agents:
-                print("***zhhw uid: ", uid)
+                # print("***zhhw uid: ", uid)
                 self.memories[uid].create_tensor(name="states", size=self.observation_spaces[uid], dtype=torch.float32)
                 self.memories[uid].create_tensor(name="next_states", size=self.observation_spaces[uid], dtype=torch.float32)
                 self.memories[uid].create_tensor(name="actions", size=self.action_spaces[uid], dtype=torch.float32)
@@ -427,7 +427,7 @@ class MAAMP(MultiAgentSuper):
         self._current_states = None
 
 
-        print("finish init")
+        # print("finish init")
 
     def act(self, states: Mapping[str, torch.Tensor], timestep: int, timesteps: int) -> torch.Tensor:
     # torch.Tensor:
@@ -457,7 +457,7 @@ class MAAMP(MultiAgentSuper):
 
             preprocessed_state = self._ppo_state_preprocessor(states["exo"])
             # print("***self.policies: ", type(self.policies))
-            print("***self.policies: ", self.policies)
+            # print("***self.policies: ", self.policies)
             output = self.policies["exo"].act({"states": preprocessed_state}, role="policy")
 
 
@@ -468,12 +468,12 @@ class MAAMP(MultiAgentSuper):
             else: 
                 preprocessed_state = self._amp_state_preprocessor(states["humanoid"])
             output = self.policies["humanoid"].act({"states": preprocessed_state}, role="policy")
-            print("***output length:", len(output))  # 查看元组长度
-            print("***dir output:", dir(output))  # 查看元组长度
-            print("***output[0]", output[0])  # 查看元组长度
-            print("***output[1]", output[1])  # 查看元组长度
-            print("***output[2]", output[2])  # 查看元组长度
-            print("***first element shape:", output[0].shape)  # 尝试访问第一个元素
+            # print("***output length:", len(output))  # 查看元组长度
+            # print("***dir output:", dir(output))  # 查看元组长度
+            # print("***output[0]", output[0])  # 查看元组长度
+            # print("***output[1]", output[1])  # 查看元组长度
+            # print("***output[2]", output[2])  # 查看元组长度
+            # print("***first element shape:", output[0].shape)  # 尝试访问第一个元素
 
             data.append(output)
             # print("self.possible_agents: ",self.possible_agents)
