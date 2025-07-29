@@ -271,7 +271,7 @@ class MAAMP(MultiAgentSuper):
         self._amp_mixed_precision = self.cfg["AMP"]["mixed_precision"]
 
         if observation_spaces is not None:
-            # print("MAAMP observation_space",amp_observation_space)
+            print("MAAMP observation_space",amp_observation_space)
             self.amp_observation_space = amp_observation_space
         else:
             print("observation is None!")
@@ -284,9 +284,9 @@ class MAAMP(MultiAgentSuper):
         # set up automatic mixed precision
         self._device_type = torch.device(device).type
         if version.parse(torch.__version__) >= version.parse("2.4"):
-            self.scaler = torch.amp.GradScaler(device=self._device_type, enabled=self._ppo_mixed_precision)
+            self.scaler = torch.amp.GradScaler(device=self._device_type, enabled=self._amp_mixed_precision)
         else:
-            self.scaler = torch.cuda.amp.GradScaler(enabled=self._ppo_mixed_precision)
+            self.scaler = torch.cuda.amp.GradScaler(enabled=self._amp_mixed_precision)
 
         # set up optimizer and learning rate scheduler
         self.optimizers = {}
@@ -957,20 +957,20 @@ class MAAMP(MultiAgentSuper):
         self.reply_buffer.add_samples(states=amp_states.view(-1, amp_states.shape[-1]))
 
         # record data
-        self.track_data("Loss / Policy loss", cumulative_policy_loss / (self._amp_learning_epochs * self._amp_mini_batches))
-        self.track_data("Loss / Value loss", cumulative_value_loss / (self._amp_learning_epochs * self._amp_mini_batches))
+        self.track_data("Loss / Policy loss(humanoid)", cumulative_policy_loss / (self._amp_learning_epochs * self._amp_mini_batches))
+        self.track_data("Loss / Value loss (humanoid)", cumulative_value_loss / (self._amp_learning_epochs * self._amp_mini_batches))
         if self._amp_entropy_loss_scale:
             self.track_data(
-                "Loss / Entropy loss", cumulative_entropy_loss / (self._amp_learning_epochs * self._amp_mini_batches)
+                "Loss / Entropy loss (humanoid)", cumulative_entropy_loss / (self._amp_learning_epochs * self._amp_mini_batches)
             )
         self.track_data(
-            "Loss / Discriminator loss", cumulative_discriminator_loss / (self._amp_learning_epochs * self._amp_mini_batches)
+            "Loss / Discriminator loss (humanoid)", cumulative_discriminator_loss / (self._amp_learning_epochs * self._amp_mini_batches)
         )
 
-        self.track_data("Policy / Standard deviation", self.policies["humanoid"].distribution(role="policy").stddev.mean().item())
+        self.track_data("Policy / Standard deviation (humanoid)", self.policies["humanoid"].distribution(role="policy").stddev.mean().item())
 
         if self._amp_learning_rate_scheduler:
-            self.track_data("Learning / Learning rate", self.scheduler.get_last_lr()[0])
+            self.track_data("Learning / Learning rate (humanoid)", self.scheduler.get_last_lr()[0])
 
 
 
@@ -1048,9 +1048,9 @@ class MAAMP(MultiAgentSuper):
         # sample mini-batches from memory
         ppo_sampled_batches = self.memories["exo"].sample_all(names=self.ppo_tensors_names, mini_batches=self._ppo_mini_batches)
 
-        cumulative_policy_loss = 0
-        cumulative_entropy_loss = 0
-        cumulative_value_loss = 0
+        ppo_cumulative_policy_loss = 0
+        ppo_cumulative_entropy_loss = 0
+        ppo_cumulative_value_loss = 0
 
         # learning epochs
         for epoch in range(self._ppo_learning_epochs):
@@ -1130,10 +1130,10 @@ class MAAMP(MultiAgentSuper):
                 self.scaler.update()
 
                 # update cumulative losses
-                cumulative_policy_loss += policy_loss.item()
-                cumulative_value_loss += value_loss.item()
+                ppo_cumulative_policy_loss += policy_loss.item()
+                ppo_cumulative_value_loss += value_loss.item()
                 if self._ppo_entropy_loss_scale:
-                    cumulative_entropy_loss += entropy_loss.item()
+                    ppo_cumulative_entropy_loss += entropy_loss.item()
 
             # update learning rate
             if self._ppo_learning_rate_scheduler:
@@ -1150,16 +1150,16 @@ class MAAMP(MultiAgentSuper):
         # record data
         self.track_data(
             f"Loss / Policy loss (exo)",
-            cumulative_policy_loss / (self._ppo_learning_epochs * self._ppo_mini_batches),
+            ppo_cumulative_policy_loss / (self._ppo_learning_epochs * self._ppo_mini_batches),
         )
         self.track_data(
             f"Loss / Value loss (exo)",
-            cumulative_value_loss / (self._ppo_learning_epochs* self._ppo_mini_batches),
+            ppo_cumulative_value_loss / (self._ppo_learning_epochs* self._ppo_mini_batches),
         )
         if self._ppo_entropy_loss_scale:
             self.track_data(
                 f"Loss / Entropy loss (exo)",
-                cumulative_entropy_loss / (self._ppo_learning_epochs* self._ppo_mini_batches),
+                ppo_cumulative_entropy_loss / (self._ppo_learning_epochs* self._ppo_mini_batches),
             )
 
         self.track_data(
