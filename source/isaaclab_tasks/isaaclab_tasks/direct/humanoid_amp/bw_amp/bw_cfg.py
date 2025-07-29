@@ -65,7 +65,7 @@ BW_CFG = ArticulationCfg(
                 # },
             ),
             "feet": ImplicitActuatorCfg(
-                effort_limit=20,
+                effort_limit=100,
                 joint_names_expr=[".*_ankle_pitch_joint", ".*_ankle_roll_joint"],
                 stiffness=20.0,
                 damping=2.0,

@@ -30,6 +30,7 @@ class BwAmpEnv(DirectRLEnv):
         dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
         self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
         self.action_scale = dof_upper_limits - dof_lower_limits
+        print("self.action_scale",self.action_scale)
         # self.pre_actions = torch.zeros((self.num_envs, self.cfg.action_space), device=self.device)
         # print("DOF LIMITS")
         # print(dof_lower_limits)
@@ -138,7 +139,7 @@ class BwAmpEnv(DirectRLEnv):
             self.robot.data.body_com_pos_w,
             self.robot.data.body_com_vel_w,
         )
-        self.extras["log"] = reward_log
+        print(" rewward log",reward_log) 
         return total_reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:

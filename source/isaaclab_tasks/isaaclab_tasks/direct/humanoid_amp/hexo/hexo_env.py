@@ -102,13 +102,13 @@ class HexoEnv(DirectMARLEnv):
 
 
     def _apply_action(self):
-        self.robot.set_joint_effort_target(
+        self.robot.set_joint_position_target(
             self.actions["humanoid"] *self.action_scale + self.action_offset  , joint_ids=self._humanoid_dof_idx
         )
         # print("humanoid self.actions shape ",self.actions["humanoid"][0])
          # set all actions["exo"] are zero
         self.actions["exo"] *= 0  
-        self.robot.set_joint_effort_target(
+        self.robot.set_joint_position_target(
             self.actions["exo"] *self.action_scale[10:11] + self.action_offset[10:11] , joint_ids=self._exo_dof_idx
         )
     
