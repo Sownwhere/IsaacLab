@@ -53,18 +53,6 @@ MAAMP_DEFAULT_CONFIG = {
     "time_limit_bootstrap": False,  # bootstrap at timeout termination (episode truncation)
 
     "mixed_precision": False,       # enable automatic mixed precision for higher performance
-
-    "experiment": {
-        "directory": "",            # experiment's parent directory
-        "experiment_name": "",      # experiment name
-        "write_interval": "auto",   # TensorBoard writing interval (timesteps)
-
-        "checkpoint_interval": "auto",      # interval for checkpoints (timesteps)
-        "store_separately": False,          # whether to store checkpoints separately
-
-        "wandb": False,             # whether to use Weights & Biases
-        "wandb_kwargs": {}          # wandb kwargs (see https://docs.wandb.ai/ref/python/init)
-    }
     },
 
 
@@ -113,17 +101,17 @@ MAAMP_DEFAULT_CONFIG = {
 
     "mixed_precision": False,       # enable automatic mixed precision for higher performance
 
-    "experiment": {
-        "directory": "",            # experiment's parent directory
-        "experiment_name": "",      # experiment name
-        "write_interval": "auto",   # TensorBoard writing interval (timesteps)
+    # "experiment": {
+    #     "directory": "",            # experiment's parent directory
+    #     "experiment_name": "",      # experiment name
+    #     "write_interval": "auto",   # TensorBoard writing interval (timesteps)
 
-        "checkpoint_interval": "auto",      # interval for checkpoints (timesteps)
-        "store_separately": False,          # whether to store checkpoints separately
+    #     "checkpoint_interval": "auto",      # interval for checkpoints (timesteps)
+    #     "store_separately": False,          # whether to store checkpoints separately
 
-        "wandb": False,             # whether to use Weights & Biases
-        "wandb_kwargs": {}          # wandb kwargs (see https://docs.wandb.ai/ref/python/init)
-    }
+    #     "wandb": False,             # whether to use Weights & Biases
+    #     "wandb_kwargs": {}          # wandb kwargs (see https://docs.wandb.ai/ref/python/init)
+    # }
    }
 }
 # 
@@ -132,7 +120,7 @@ class MAAMP(MultiAgentSuper):
     def __init__(
         self,
         possible_agents: Sequence[str],
-        models: Mapping[str, Model],
+        models: Mapping[str, Mapping[str, Model]],
         memories: Optional[Mapping[str, Memory]] = None,
         observation_spaces: Optional[Union[Mapping[str, int], Mapping[str, gymnasium.Space]]] = None,
         amp_observation_space: Optional[Union[int, Tuple[int], gymnasium.Space]] = None,
@@ -275,6 +263,7 @@ class MAAMP(MultiAgentSuper):
             self.amp_observation_space = amp_observation_space
         else:
             print("observation is None!")
+
         self.motion_dataset = motion_dataset
         self.reply_buffer = reply_buffer
         self.collect_reference_motions = collect_reference_motions
@@ -282,6 +271,13 @@ class MAAMP(MultiAgentSuper):
 
 
         # set up automatic mixed precision
+        
+        # set up automatic mixed precision
+        if device is None:
+            print("[info] will use cpu")
+            device = "cpu"
+        self._device_type = torch.device(device).type
+        
         self._device_type = torch.device(device).type
         if version.parse(torch.__version__) >= version.parse("2.4"):
             self.scaler = torch.amp.GradScaler(device=self._device_type, enabled=self._amp_mixed_precision)
@@ -429,8 +425,9 @@ class MAAMP(MultiAgentSuper):
 
         # print("finish init")
 
-    def act(self, states: Mapping[str, torch.Tensor], timestep: int, timesteps: int) -> torch.Tensor:
-    # torch.Tensor:
+    def act(self, states: Mapping[str, torch.Tensor], timestep: int, timesteps: int) -> tuple[
+        Mapping[str, torch.Tensor], Mapping[str, torch.Tensor], Mapping[str, torch.Tensor]]:
+        # torch.Tensor:
         """Process the environment's states to make a decision (actions) using the main policies
 
         :param states: Environment's states
@@ -440,8 +437,8 @@ class MAAMP(MultiAgentSuper):
         :param timesteps: Number of timesteps
         :type timesteps: int
 
-        :return: Actions
-        :rtype: torch.Tensor
+        :return: Actions, log probabilities, and outputs
+        :rtype: tuple of dictionaries of torch.Tensor
         """
         # # sample random actions
         # # TODO: fix for stochasticity, rnn and log_prob
@@ -451,39 +448,30 @@ class MAAMP(MultiAgentSuper):
         # sample stochastic actions
         with torch.autocast(device_type=self._device_type, enabled=self._amp_mixed_precision):
 
-        # for uid in self.possible_agents:
-        #     print(uid)
-            data =[]
+            data = []
 
             preprocessed_state = self._ppo_state_preprocessor(states["exo"])
-            # print("***self.policies: ", type(self.policies))
-            # print("***self.policies: ", self.policies)
             output = self.policies["exo"].act({"states": preprocessed_state}, role="policy")
-
-
             data.append(output)
 
             if self._current_states is not None:
                 preprocessed_state = self._amp_state_preprocessor(self._current_states)
             else: 
                 preprocessed_state = self._amp_state_preprocessor(states["humanoid"])
+            
+            if timestep < self._amp_random_timesteps:
+                self.policies["humanoid"].random_act({"states": states}, role="policy")
             output = self.policies["humanoid"].act({"states": preprocessed_state}, role="policy")
-            # print("***output length:", len(output))  # 查看元组长度
-            # print("***dir output:", dir(output))  # 查看元组长度
-            # print("***output[0]", output[0])  # 查看元组长度
-            # print("***output[1]", output[1])  # 查看元组长度
-            # print("***output[2]", output[2])  # 查看元组长度
-            # print("***first element shape:", output[0].shape)  # 尝试访问第一个元素
-
             data.append(output)
-            # print("self.possible_agents: ",self.possible_agents)
+
+
             actions = {uid: d[0] for uid, d in zip(self.possible_agents, data)}
             log_prob = {uid: d[1] for uid, d in zip(self.possible_agents, data)}
             outputs = {uid: d[2] for uid, d in zip(self.possible_agents, data)}
 
             self._current_log_prob = log_prob
-            # print("actions:", actions)
         return actions, log_prob, outputs
+
 
     def record_transition(
         self,

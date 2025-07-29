@@ -202,15 +202,21 @@ def main():
        
                 actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
                 # 将actions 的第一项全零
- 
-                # actions["exo"] = torch.zeros_like(actions["exo"])
-                # print(f"actions: {actions}")
+                print(f"actions[exo][1]: ",actions["exo"][:, 0] )
+                print(f"actions[humanoid][4]",actions["exo"][:, 1])
+
+                actions["exo"][:, 0] = actions["humanoid"][:, 4]   # 第 4 个维度 → exo 第 0 项
+                actions["exo"][:, 1] = actions["humanoid"][:, 10]  # 第 10 个维度 → exo 第 1 项
+
 
             
                 
             # - single-agent (deterministic) actions
             else:
                 actions = outputs[-1].get("mean_actions", outputs[0])
+
+            
+            # print(f"actions: {actions}")
             # env stepping
             obs, _, _, _, _ = env.step(actions)
         if args_cli.video:
