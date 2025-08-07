@@ -51,7 +51,7 @@ class HexoEnvCfg(DirectMARLEnvCfg):
 
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=12.0, replicate_physics=True)
 
     # robot
     robot_cfg: ArticulationCfg = HEXO_CFG.replace(prim_path="/World/envs/env_.*/Robot")
@@ -78,4 +78,4 @@ class HexoEnvCfg(DirectMARLEnvCfg):
           
 @configclass
 class HexoWalkEnvCfg(HexoEnvCfg):
-    motion_file = os.path.join(MOTIONS_DIR, "bw_walk_npy/bw.npz")
+    motion_file = os.path.join(MOTIONS_DIR, "bw_walk_npy/bw_20250806_150120.npz")
