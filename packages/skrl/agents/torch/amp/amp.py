@@ -143,12 +143,16 @@ class AMP(Agent):
 
         self.amp_observation_space = amp_observation_space
         print("self.amp_observation_space", self.amp_observation_space)
+
         self.motion_dataset = motion_dataset
         print("self.motion_dataset", self.motion_dataset)
+
         self.reply_buffer = reply_buffer
         print("self.reply_buffer", self.reply_buffer)
+
         self.collect_reference_motions = collect_reference_motions
         print("self.collect_reference_motions", self.collect_reference_motions)
+        
         self.collect_observation = collect_observation
         print("self.collect_observation", self.collect_observation)
 

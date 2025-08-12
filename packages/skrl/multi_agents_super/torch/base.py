@@ -86,7 +86,12 @@ class MultiAgentSuper:
                 if model is not None:
                     model.to(model.device)
 
+        print("MultiAgentSuper models", self.models)
+
         self.tracking_data = collections.defaultdict(list)
+
+        # print("MultiAgentSuper cfg", self.cfg)
+        # print("MultiAgentSuper cfg.get(experiment)",self.cfg.get("experiment"))
         self.write_interval = self.cfg.get("experiment", {}).get("write_interval", "auto")
 
         self._track_rewards = collections.deque(maxlen=100)
