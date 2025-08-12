@@ -92,7 +92,14 @@ from isaaclab_rl.skrl import SkrlVecEnvWrapper
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
 
-# PLACEHOLDER: Extension template (do not remove this comment)
+# from utils.plotter import Plotter, initCanvas
+import sys
+import os
+# Add the parent directory to the path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from utils.plotter import Plotter, initCanvas
+import matplotlib.pyplot as plt
+en_plot = 1
 
 # config shortcuts
 algorithm = args_cli.algorithm.lower()
@@ -186,9 +193,23 @@ def main():
     # set agent to evaluation mode
     runner.agent.set_running_mode("eval")
 
+
+
+    if en_plot:
+        plt.ion()
+        initCanvas(2, 6, 100)
+        torque_names = [
+            'left leg pitch', 'left leg roll', 'left leg yaw', 'left leg knee',
+            'left leg ankle pitch', 'left leg ankle roll',
+            'right leg pitch', 'right leg roll', 'right leg yaw', 'right leg knee',
+            'right leg ankle pitch', 'right leg ankle roll'
+        ]
+        plotters = [Plotter(i, name) for i, name in enumerate(torque_names)]
+
     # reset environment
     obs, _ = env.reset()
     timestep = 0
+    last_actions = None
     # simulate environment
     while simulation_app.is_running():
         start_time = time.time()
@@ -202,20 +223,25 @@ def main():
        
                 actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
                 # 将actions 的第一项全零
-                print(f"actions[exo][1]: ",actions["exo"][:, 0] )
-                print(f"actions[humanoid][4]",actions["exo"][:, 1])
+                # print(f"actions[exo][1]: ",actions["exo"][:, 0] )
+                # print(f"actions[humanoid][4]",actions["exo"][:, 1])
 
                 actions["exo"][:, 0] = actions["humanoid"][:, 4]   # 第 4 个维度 → exo 第 0 项
                 actions["exo"][:, 1] = actions["humanoid"][:, 10]  # 第 10 个维度 → exo 第 1 项
-
-
-            
-                
             # - single-agent (deterministic) actions
             else:
                 actions = outputs[-1].get("mean_actions", outputs[0])
 
+            if en_plot:
+                # Initialize last_actions on first step or ensure it has the right size
+                for joint_idx in range(len(plotters)):
+                    if joint_idx < actions["humanoid"].shape[1]:
+                        plotters[joint_idx].plotLine(
+                            actions["humanoid"][0, joint_idx].item(),
+                            labels=['action']
+                        )
             
+                        
             # print(f"actions: {actions}")
             # env stepping
             obs, _, _, _, _ = env.step(actions)

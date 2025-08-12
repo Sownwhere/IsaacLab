@@ -23,7 +23,7 @@ HEXO_CFG = ArticulationCfg(
                 max_depenetration_velocity=10.0,
             ),
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                enabled_self_collisions=False, solver_position_iteration_count=4, solver_velocity_iteration_count=0
+                enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=0
             ),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
@@ -66,7 +66,7 @@ HEXO_CFG = ArticulationCfg(
                 # },
             ),
             "feet": ImplicitActuatorCfg(
-                effort_limit=100,
+                effort_limit=40,
                 joint_names_expr=[".*_ankle_pitch_joint", ".*_ankle_roll_joint"],
                 stiffness=20.0,
                 damping=2.0,
