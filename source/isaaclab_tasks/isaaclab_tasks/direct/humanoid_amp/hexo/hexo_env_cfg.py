@@ -78,4 +78,4 @@ class HexoEnvCfg(DirectMARLEnvCfg):
           
 @configclass
 class HexoWalkEnvCfg(HexoEnvCfg):
-    motion_file = os.path.join(MOTIONS_DIR, "bw_walk_npy/bw_20250806_150120.npz")
+    motion_file = os.path.join(MOTIONS_DIR, "bw_walk_npy/bw_20250807_153247.npz")
