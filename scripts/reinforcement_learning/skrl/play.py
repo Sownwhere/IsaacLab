@@ -95,11 +95,16 @@ from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, pa
 # from utils.plotter import Plotter, initCanvas
 import sys
 import os
+import numpy as np
 # Add the parent directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.plotter import Plotter, initCanvas
 import matplotlib.pyplot as plt
 en_plot = 1
+action_scale = [2.5920, 2.5920, 3.1416, 3.1416, 4.9637, 4.9637, 0.9090, 0.9090, 1.2566, 1.4154, 0.4712, 0.4712]
+action_offset =[-0.1300, -0.1300,  1.2217, -1.2217,  0.0000,  0.0000,  0.4950,  0.4950, -0.1745, -0.0863,  0.0000,  0.0000]
+
+scaled_actions = [0,0,0, 0,0,0, 0,0,0, 0,0,0] # 确保有12个元素
 
 # config shortcuts
 algorithm = args_cli.algorithm.lower()
@@ -232,16 +237,21 @@ def main():
             else:
                 actions = outputs[-1].get("mean_actions", outputs[0])
 
+
+            #plot actions data
+            for i in range(12):  # 遍历动作维度
+                tmp = actions["humanoid"][0, i].detach().cpu().item()
+                scaled_actions[i] = tmp * action_scale[i]    + action_offset[i]
+
             if en_plot:
-                # Initialize last_actions on first step or ensure it has the right size
+                # 每个关节单独画
                 for joint_idx in range(len(plotters)):
-                    if joint_idx < actions["humanoid"].shape[1]:
+                    if joint_idx < len(scaled_actions):
                         plotters[joint_idx].plotLine(
-                            actions["humanoid"][0, joint_idx].item(),
+                            [scaled_actions[joint_idx]],  # 单个关节值
                             labels=['action']
                         )
-            
-                        
+
             # print(f"actions: {actions}")
             # env stepping
             obs, _, _, _, _ = env.step(actions)

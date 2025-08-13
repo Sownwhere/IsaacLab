@@ -81,9 +81,11 @@ contributions can make a significant impact on the Isaac Lab community and beyon
 ## Start
 
 ```
+
 conda activate env_isaaclab
 cd IsaacLab
 export PYTHONPATH=~/IsaacLab/packages:$PYTHONPATH
+
 ```
 ### Symbolic Links
 ```
@@ -102,7 +104,7 @@ or
 ```
 ./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task Bw --num_envs 32 
 
-./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task hexo --algorithm MAAMP  --num_envs 32 
+   ./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task hexo --algorithm MAAMP  --num_envs 1 
 ```
 ### TensorBoard
 ```

@@ -74,6 +74,6 @@ class Plotter:
                         ax[psoRow, posCol].plot(x, yAxis, label=labels[i])
                         ax[psoRow, posCol].legend()
                 ax[psoRow, posCol].set_title(self.title)
-            # if self.plotNo == 0:
-            #     print("Paused ",self.plotNo)
-            #     plt.pause(0.001)
+            if self.plotNo == 0:
+                # print("Paused ",self.plotNo)
+                plt.pause(0.00001)
