@@ -104,7 +104,7 @@ or
 ```
 ./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task Bw --num_envs 32 
 
-   ./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task hexo --algorithm MAAMP  --num_envs 1 
+./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task hexo --algorithm MAAMP  --num_envs 36
 ```
 ### TensorBoard
 ```

@@ -89,7 +89,6 @@ from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkp
 
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
-import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
 
 # from utils.plotter import Plotter, initCanvas
@@ -101,10 +100,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.plotter import Plotter, initCanvas
 import matplotlib.pyplot as plt
 en_plot = 1
-action_scale = [2.5920, 2.5920, 3.1416, 3.1416, 4.9637, 4.9637, 0.9090, 0.9090, 1.2566, 1.4154, 0.4712, 0.4712]
-action_offset =[-0.1300, -0.1300,  1.2217, -1.2217,  0.0000,  0.0000,  0.4950,  0.4950, -0.1745, -0.0863,  0.0000,  0.0000]
 
-scaled_actions = [0,0,0, 0,0,0, 0,0,0, 0,0,0] # 确保有12个元素
 
 # config shortcuts
 algorithm = args_cli.algorithm.lower()
@@ -124,14 +120,6 @@ def main():
         experiment_cfg = load_cfg_from_registry(args_cli.task, f"skrl_{algorithm}_cfg_entry_point")
     except ValueError:
         experiment_cfg = load_cfg_from_registry(args_cli.task, "skrl_cfg_entry_point")
-
-
-    # print(f"experiment_cfg: {experiment_cfg}")
-    # if isinstance(experiment_cfg, dict) and experiment_cfg.get("experiment") is None:
-    #     print("[INFO] No experiment configuration found. Using default configuration.")
-    # print("[INFO] Using skrl configuration: ",experiment_cfg.get("agent",{}))
-    # if isinstance(experiment_cfg, dict) and experiment_cfg.get("agent",{}).get("AMP",{}).get("experiment") is not None:
-    #     print("[INFO] Using humanoid experiment configuration.")    
 
     if not isinstance(experiment_cfg, dict):
         print("[WARNING] Experiment configuration is not a dictionary. Using default configuration.")
@@ -198,17 +186,21 @@ def main():
     # set agent to evaluation mode
     runner.agent.set_running_mode("eval")
 
+    print("dir env ",dir(env))
+    for name in dir(env):
+        attr = getattr(env, name)
+        if callable(attr):
+            print(f"{name}  --> function/method")
+        else:
+            print(f"{name}  --> value: {attr}")
+
 
 
     if en_plot:
         plt.ion()
         initCanvas(2, 6, 100)
-        torque_names = [
-            'left leg pitch', 'left leg roll', 'left leg yaw', 'left leg knee',
-            'left leg ankle pitch', 'left leg ankle roll',
-            'right leg pitch', 'right leg roll', 'right leg yaw', 'right leg knee',
-            'right leg ankle pitch', 'right leg ankle roll'
-        ]
+        torque_names = ['left_leg_pitch', 'right_leg_pitch', 'left_leg_roll', 'right_leg_roll', 'left_leg_yaw', 'right_leg_yaw',
+                         'left_knee', 'right_knee', 'left_ankle_pitch', 'right_ankle_pitch', 'left_ankle_roll', 'right_ankle_roll']
         plotters = [Plotter(i, name) for i, name in enumerate(torque_names)]
 
     # reset environment
@@ -228,8 +220,6 @@ def main():
        
                 actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
                 # 将actions 的第一项全零
-                # print(f"actions[exo][1]: ",actions["exo"][:, 0] )
-                # print(f"actions[humanoid][4]",actions["exo"][:, 1])
 
                 actions["exo"][:, 0] = actions["humanoid"][:, 4]   # 第 4 个维度 → exo 第 0 项
                 actions["exo"][:, 1] = actions["humanoid"][:, 10]  # 第 10 个维度 → exo 第 1 项
@@ -239,22 +229,28 @@ def main():
 
 
             #plot actions data
-            for i in range(12):  # 遍历动作维度
-                tmp = actions["humanoid"][0, i].detach().cpu().item()
-                scaled_actions[i] = tmp * action_scale[i]    + action_offset[i]
+            # for i in range(12):  # 遍历动作维度
+            #     tmp = actions["humanoid"][0, i].detach().cpu().item()
+            #     scaled_actions[i] = tmp * action_scale[i]    + action_offset[i]
+
+            # obs, _, _, _, _ = env.step(actions)
+            obs, rew, term, trunc, extras = env.step(actions)
+            # print("joint names ",extras["joint_names"])
+            
 
             if en_plot:
                 # 每个关节单独画
                 for joint_idx in range(len(plotters)):
-                    if joint_idx < len(scaled_actions):
+                    if joint_idx < len(extras["joint_names"]):
                         plotters[joint_idx].plotLine(
-                            [scaled_actions[joint_idx]],  # 单个关节值
+                            # [scaled_actions[joint_idx]],  # 单个关节值
+                            env.extras["applied_torque"][0, joint_idx].item(),
                             labels=['action']
                         )
 
-            # print(f"actions: {actions}")
-            # env stepping
-            obs, _, _, _, _ = env.step(actions)
+
+
+
         if args_cli.video:
             timestep += 1
             # exit the play loop after recording one video
