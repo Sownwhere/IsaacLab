@@ -38,7 +38,7 @@ class HexoEnv(DirectMARLEnv):
         self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
         self.action_scale = dof_upper_limits - dof_lower_limits
         print("self.action_scale:", self.action_scale)
-
+        print("self.action_offset:", self.action_offset)
         #load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
 
@@ -100,7 +100,6 @@ class HexoEnv(DirectMARLEnv):
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]):
         self.actions = {k: v.clone() for k, v in actions.items()}
 
-
     def _apply_action(self):
         self.robot.set_joint_position_target(
             self.actions["humanoid"] *self.action_scale + self.action_offset  , joint_ids=self._humanoid_dof_idx
@@ -130,9 +129,13 @@ class HexoEnv(DirectMARLEnv):
         for i in reversed(range(self.cfg.num_amp_observations - 1)):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
         self.amp_observation_buffer[:, 0] = humanoid_obs.clone()  # 最新的放在最前面
-
+        
+        applied_torque = self.robot.data.applied_torque
         # 存入 extras 供外部使用
         self.extras = {
+            "joint_names" : self.robot.data.joint_names,
+            "applied_torque" : applied_torque,
+            "joint_vel": self.robot.data.joint_vel,
             "amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)
         }
         # print(self.extras["amp_obs"].shape)
