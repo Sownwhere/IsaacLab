@@ -28,6 +28,8 @@ class HexoEnv(DirectMARLEnv):
 
         self._humanoid_dof_idx, _ = self.robot.find_joints(self.cfg.humanoid_dof_name)
         self._exo_dof_idx, _ = self.robot.find_joints(self.cfg.exo_dof_name)
+        print("_humanoid_dof_idx",self._humanoid_dof_idx)
+        print("_exo_dof_idx",self._exo_dof_idx)
 
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
@@ -61,6 +63,7 @@ class HexoEnv(DirectMARLEnv):
             # 'right_ankle_pitch_link',
             'right_ankle_roll_link',
         ]
+        self.exo_actions =None
 
         self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
         self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
@@ -105,11 +108,12 @@ class HexoEnv(DirectMARLEnv):
             self.actions["humanoid"] *self.action_scale + self.action_offset  , joint_ids=self._humanoid_dof_idx
         )
         # print("humanoid self.actions shape ",self.actions["humanoid"][0])
-         # set all actions["exo"] are zero
-        self.actions["exo"] *= 0  
+        # set all actions["exo"] are zero
+        # self.actions["exo"] *= 0  
         self.robot.set_joint_position_target(
-            self.actions["exo"] *self.action_scale[10:11] + self.action_offset[10:11] , joint_ids=self._exo_dof_idx
+            self.actions["exo"] *self.action_scale[8:9] + self.action_offset[8:9] , joint_ids=self._exo_dof_idx
         )
+        self.exo_actions = self.actions["exo"]
     
 
 
@@ -124,7 +128,6 @@ class HexoEnv(DirectMARLEnv):
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],
             self.robot.data.body_pos_w[:, self.key_body_indexes],
         )
-        # print("++++++++++++++++")
         # === 维护 AMP 历史 buffer ===
         for i in reversed(range(self.cfg.num_amp_observations - 1)):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
@@ -133,14 +136,13 @@ class HexoEnv(DirectMARLEnv):
         applied_torque = self.robot.data.applied_torque
         # 存入 extras 供外部使用
         self.extras = {
+            "exo_actions" : self.exo_actions,
             "joint_names" : self.robot.data.joint_names,
             "applied_torque" : applied_torque,
-            "joint_vel": self.robot.data.joint_vel,
-            "amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)
+            # "joint_vel": self.robot.data.joint_vel,
+            # "amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)
         }
         # print(self.extras["amp_obs"].shape)
-        # print("++++++++++++++++")
-
         # exo：保持原来的简单观测
         exo_obs = torch.cat(
             (
@@ -151,7 +153,7 @@ class HexoEnv(DirectMARLEnv):
             ),
             dim=-1,
         )
-        # print("++++++++++++++++")
+
         # 组合返回
         return {
             "exo": exo_obs,
@@ -298,7 +300,6 @@ def feet_too_near_humanoid(
     body_com_pos_w: torch.Tensor,   
     threshold: float = 0.1
 ) -> torch.Tensor:
-    # print("aaaaaaaaaaaaaaaaaaa",body_com_pos_w.shape)
     # assert joint_pos.shape[-1] == 12
     distance = torch.norm(body_com_pos_w[:,6, 1] - body_com_pos_w[:, 12, 1], dim=-1)
 

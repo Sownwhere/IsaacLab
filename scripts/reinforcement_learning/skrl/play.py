@@ -181,7 +181,7 @@ def main():
     experiment_cfg["agent"]["experiment"]["checkpoint_interval"] = 0  # don't generate checkpoints
     runner = Runner(env, experiment_cfg)
 
-    print(f"[INFO] Loading model checkpoint from: {resume_path}")
+    # print(f"[INFO] Loading model checkpoint from: {resume_path}")
     runner.agent.load(resume_path)
     # set agent to evaluation mode
     runner.agent.set_running_mode("eval")
@@ -198,11 +198,24 @@ def main():
 
     if en_plot:
         plt.ion()
+        torque_names = [
+            'left_leg_pitch', 'right_leg_pitch', 'left_leg_roll', 'right_leg_roll',
+            'left_leg_yaw', 'right_leg_yaw', 'left_knee', 'right_knee',
+            'left_ankle_pitch', 'right_ankle_pitch', 'left_ankle_roll', 'right_ankle_roll'
+        ]
+
+        # 创建 2 行 6 列的画布（总共 12 个子图）
         initCanvas(2, 6, 100)
-        torque_names = ['left_leg_pitch', 'right_leg_pitch', 'left_leg_roll', 'right_leg_roll', 'left_leg_yaw', 'right_leg_yaw',
-                         'left_knee', 'right_knee', 'left_ankle_pitch', 'right_ankle_pitch', 'left_ankle_roll', 'right_ankle_roll']
         plotters = [Plotter(i, name) for i, name in enumerate(torque_names)]
 
+        # ----------------------
+        # 外骨骼关节
+        # ----------------------
+        # exo_torque_names = ['left_ankle', 'right_ankle']
+
+        # # 创建 1 行 2 列的画布（总共 2 个子图）
+        # initCanvas(1, 2, 100)
+        # exo_plotters = [Plotter(i, name) for i, name in enumerate(exo_torque_names)]
     # reset environment
     obs, _ = env.reset()
     timestep = 0
@@ -221,8 +234,8 @@ def main():
                 actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
                 # 将actions 的第一项全零
 
-                actions["exo"][:, 0] = actions["humanoid"][:, 4]   # 第 4 个维度 → exo 第 0 项
-                actions["exo"][:, 1] = actions["humanoid"][:, 10]  # 第 10 个维度 → exo 第 1 项
+                actions["exo"][:, 0] = actions["humanoid"][:, 8]   # 第 8 个维度 → exo 第 0 项
+                actions["exo"][:, 1] = actions["humanoid"][:, 9]  # 第 9 个维度 → exo 第 1 项
             # - single-agent (deterministic) actions
             else:
                 actions = outputs[-1].get("mean_actions", outputs[0])
@@ -236,18 +249,26 @@ def main():
             # obs, _, _, _, _ = env.step(actions)
             obs, rew, term, trunc, extras = env.step(actions)
             # print("joint names ",extras["joint_names"])
-            
+            print("len(extras[applied_torque]",len(extras["applied_torque"]))
+            print("extras[applied_torque]",extras["applied_torque"].shape)
+            print("len(extras[joint_names])",len(extras["joint_names"]))
 
             if en_plot:
-                # 每个关节单独画
+                # 绘制全身关节
                 for joint_idx in range(len(plotters)):
                     if joint_idx < len(extras["joint_names"]):
                         plotters[joint_idx].plotLine(
-                            # [scaled_actions[joint_idx]],  # 单个关节值
                             env.extras["applied_torque"][0, joint_idx].item(),
                             labels=['action']
                         )
 
+                # # 绘制外骨骼关节
+                # for joint_idx in range(len(exo_plotters)):
+                #     if joint_idx < len(extras["exo_actions"]):
+                #         exo_plotters[joint_idx].plotLine(
+                #             env.extras["exo_actions"][0, joint_idx].item(),
+                #             labels=['action']
+                #         )
 
 
 
