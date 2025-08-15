@@ -27,12 +27,11 @@ HEXO_CFG = ArticulationCfg(
             ),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 1.4),
+            pos=(0.0, 0.0, 1.36),
             joint_pos={
                 ".*_leg_pitch_joint": 0.0,
                 ".*_knee_joint": 0.0,
                 ".*_ankle_pitch_joint": 0.0,
-                # ".*_elbow_pitch_joint": 0.87
             },
             joint_vel={".*": 0.0},
         ),
