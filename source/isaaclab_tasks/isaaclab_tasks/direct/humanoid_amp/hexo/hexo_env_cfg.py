@@ -18,8 +18,8 @@ class HexoEnvCfg(DirectMARLEnvCfg):
     rew_joint_pos_limits = -0.5
     rew_joint_acc_l2 = -0.001
     rew_joint_vel_l2 = -0.001
-
-
+    rew_exo_torque = -0.5
+    exo_torque_limit = 10.0
     # env
     decimation = 2
     episode_length_s = 10.0
