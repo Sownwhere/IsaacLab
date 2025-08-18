@@ -205,17 +205,17 @@ def main():
         ]
 
         # 创建 2 行 6 列的画布（总共 12 个子图）
-        initCanvas(2, 6, 100)
-        plotters = [Plotter(i, name) for i, name in enumerate(torque_names)]
+        # initCanvas(2, 6, 100)
+        # plotters = [Plotter(i, name) for i, name in enumerate(torque_names)]
 
         # ----------------------
         # 外骨骼关节
         # ----------------------
-        # exo_torque_names = ['left_ankle', 'right_ankle']
+        exo_torque_names = ['left_ankle', 'right_ankle']
 
-        # # 创建 1 行 2 列的画布（总共 2 个子图）
-        # initCanvas(1, 2, 100)
-        # exo_plotters = [Plotter(i, name) for i, name in enumerate(exo_torque_names)]
+        # 创建 1 行 2 列的画布（总共 2 个子图）
+        initCanvas(1, 2, 100)
+        exo_plotters = [Plotter(i, name) for i, name in enumerate(exo_torque_names)]
     # reset environment
     obs, _ = env.reset()
     timestep = 0
@@ -249,26 +249,23 @@ def main():
             # obs, _, _, _, _ = env.step(actions)
             obs, rew, term, trunc, extras = env.step(actions)
             # print("joint names ",extras["joint_names"])
-            print("len(extras[applied_torque]",len(extras["applied_torque"]))
-            print("extras[applied_torque]",extras["applied_torque"].shape)
-            print("len(extras[joint_names])",len(extras["joint_names"]))
+            # print("len(extras[applied_torque]",len(extras["applied_torque"]))
+            # print("extras[applied_torque]",extras["applied_torque"].shape)
+            # print("len(extras[joint_names])",len(extras["joint_names"]))
 
             if en_plot:
                 # 绘制全身关节
-                for joint_idx in range(len(plotters)):
-                    if joint_idx < len(extras["joint_names"]):
-                        plotters[joint_idx].plotLine(
-                            env.extras["applied_torque"][0, joint_idx].item(),
-                            labels=['action']
-                        )
-
-                # # 绘制外骨骼关节
-                # for joint_idx in range(len(exo_plotters)):
-                #     if joint_idx < len(extras["exo_actions"]):
-                #         exo_plotters[joint_idx].plotLine(
-                #             env.extras["exo_actions"][0, joint_idx].item(),
+                # for joint_idx in range(len(plotters)):
+                #     if joint_idx < len(extras["joint_names"]):
+                #         plotters[joint_idx].plotLine(
+                #             env.extras["applied_torque"][0, joint_idx].item(),
                 #             labels=['action']
                 #         )
+
+                # 绘制外骨骼关节
+
+                exo_plotters[0].plotLine( env.extras["exo_actions"][0, 0].item(),labels=['torque'])
+                exo_plotters[1].plotLine( env.extras["exo_actions"][0, 1].item(),labels=['torque'])
 
 
 

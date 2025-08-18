@@ -115,8 +115,6 @@ class HexoEnv(DirectMARLEnv):
         )
         self.exo_actions = self.actions["exo"]
     
-
-
     def _get_observations(self) -> dict[str, torch.Tensor]:
         # humanoid：使用 compute_obs 获取完整观测
         humanoid_obs = compute_obs(
@@ -133,14 +131,17 @@ class HexoEnv(DirectMARLEnv):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
         self.amp_observation_buffer[:, 0] = humanoid_obs.clone()  # 最新的放在最前面
         
-        applied_torque = self.robot.data.applied_torque
+        applied_torque = self.robot.data.applied_torque 
+
+        # Then in _get_observations, safely scale it:
+        exo_actions =self.actions["exo"].clone()  * 20 if self.actions["exo"] is not None else torch.zeros_like(self.actions["exo"])
         # 存入 extras 供外部使用
         self.extras = {
-            "exo_actions" : self.exo_actions,
+            "exo_actions" : exo_actions,
             "joint_names" : self.robot.data.joint_names,
             "applied_torque" : applied_torque,
             # "joint_vel": self.robot.data.joint_vel,
-            # "amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)
+            "amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)
         }
         # print(self.extras["amp_obs"].shape)
         # exo：保持原来的简单观测
@@ -164,6 +165,7 @@ class HexoEnv(DirectMARLEnv):
 
     def _get_rewards(self) -> dict[str, torch.Tensor]:
         total_reward = compute_rewards(
+            self.cfg.rew_exo_torque,
             self.cfg.rew_termination,
             self.cfg.rew_action_l2,
             self.cfg.rew_joint_pos_limits,
@@ -173,6 +175,7 @@ class HexoEnv(DirectMARLEnv):
             self.actions,
             self.robot.data.joint_pos,
             self.robot.data.soft_joint_pos_limits,
+            self.cfg.exo_torque_limit,
             self.robot.data.joint_acc,
             self.robot.data.joint_vel,
             self.robot.data.body_com_pos_w,
@@ -322,6 +325,7 @@ def feet_slipping(
 
 @torch.jit.script
 def compute_rewards(
+    rew_sacle_exo_torque:float,
     rew_scale_termination: float,
     rew_scale_action_l2: float,
     rew_scale_joint_pos_limits: float,
@@ -331,6 +335,7 @@ def compute_rewards(
     actions: dict[str, torch.Tensor],
     joint_pos: torch.Tensor,
     soft_joint_pos_limits: torch.Tensor,
+    exo_torque_limit: float,
     joint_acc: torch.Tensor,
     joint_vel: torch.Tensor,
     body_com_pos_w:  torch.Tensor,
@@ -342,6 +347,11 @@ def compute_rewards(
 
     rew_termination = rew_scale_termination * terminated_dict["humanoid"].float()
     rew_action_l2 = rew_scale_action_l2 * torch.sum(torch.square(actions["humanoid"]), dim=1)
+    rew_action_l2 = rew_scale_action_l2 * torch.sum(torch.square(actions["exo"]), dim=1)
+
+    exo_tor_limits =  (actions["exo"]*40  - exo_torque_limit).clip(min=0.0)
+    exo_tor_limits -= (actions["exo"]*40).clip(max=0.0)
+    rew_exo_torque = rew_sacle_exo_torque + torch.sum(exo_tor_limits, dim=1)
     
     out_of_limits = -(joint_pos - soft_joint_pos_limits[:,:,0]).clip(max=0.0)
     out_of_limits += (joint_pos - soft_joint_pos_limits[:,:,1]).clip(min=0.0)
@@ -356,7 +366,7 @@ def compute_rewards(
 
     total_reward = {
         "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2 +  rew_distance + rew_slip,
-        "exo":  rew_termination ,
+        "exo":  rew_termination+ rew_action_l2 + rew_exo_torque,
     }
     total_reward["exo"] =  torch.zeros_like(total_reward["exo"])
     return total_reward

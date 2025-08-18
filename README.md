@@ -109,6 +109,7 @@ or
 ### TensorBoard
 ```
 ./isaaclab.sh -p -m tensorboard.main --logdir logs/skrl/
+./isaaclab.sh -p -m tensorboard.main --logdir logs/skrl/Hexo
 ```
 
 ### skrl location 
