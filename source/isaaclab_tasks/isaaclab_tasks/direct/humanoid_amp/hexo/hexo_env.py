@@ -16,6 +16,7 @@ from isaaclab.assets import Articulation
 from isaaclab.envs import DirectMARLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_rotate
+from isaaclab.sensors.imu import Imu
 
 from .hexo_env_cfg import HexoEnvCfg
 from ..motions.python import MotionLoader
@@ -100,21 +101,36 @@ class HexoEnv(DirectMARLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
+        leg_imu_sensor = Imu(self.cfg.leg_imu_cfg)
+        # 注册到场景
+        self.scene.sensors["leg_imu"] = leg_imu_sensor
+
+        
+        
+
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]):
         self.actions = {k: v.clone() for k, v in actions.items()}
 
     def _apply_action(self):
+        # self.robot.set_joint_position_target(
+        #     self.actions["humanoid"] *self.action_scale + self.action_offset  , joint_ids=self._humanoid_dof_idx
+        # )
+        # # print("humanoid self.actions shape ",self.actions["humanoid"][0])
+        # # set all actions["exo"] are zero
+
+        # self.robot.set_joint_position_target(
+        #     self.actions["exo"] *self.action_scale[8:9] + self.action_offset[8:9] , joint_ids=self._exo_dof_idx
+        # )
+        # self.exo_actions = self.actions["exo"]
+        
+
+
         self.robot.set_joint_position_target(
-            self.actions["humanoid"] *self.action_scale + self.action_offset  , joint_ids=self._humanoid_dof_idx
+            torch.zeros_like(self.actions["humanoid"]) , joint_ids=self._humanoid_dof_idx
         )
-        # print("humanoid self.actions shape ",self.actions["humanoid"][0])
-        # set all actions["exo"] are zero
-        # self.actions["exo"] *= 0  
         self.robot.set_joint_position_target(
-            self.actions["exo"] *self.action_scale[8:9] + self.action_offset[8:9] , joint_ids=self._exo_dof_idx
+            torch.zeros_like(self.actions["exo"]), joint_ids=self._exo_dof_idx
         )
-        self.exo_actions = self.actions["exo"]
-    
     def _get_observations(self) -> dict[str, torch.Tensor]:
         # humanoid：使用 compute_obs 获取完整观测
         humanoid_obs = compute_obs(
@@ -145,6 +161,27 @@ class HexoEnv(DirectMARLEnv):
         }
         # print(self.extras["amp_obs"].shape)
         # exo：保持原来的简单观测
+        imu_data = self.scene.sensors["leg_imu"].data
+
+        # 1. 将每个 tensor 转到 CPU 并转换为 numpy
+        pos_w = imu_data.pos_w.cpu().numpy()[0]       # shape (3,)
+        quat_w = imu_data.quat_w.cpu().numpy()[0]     # shape (4,)
+        lin_vel_b = imu_data.lin_vel_b.cpu().numpy()[0]
+        ang_vel_b = imu_data.ang_vel_b.cpu().numpy()[0]
+        lin_acc_b = imu_data.lin_acc_b.cpu().numpy()[0]
+        ang_acc_b = imu_data.ang_acc_b.cpu().numpy()[0]
+
+        # 2. 格式化打印
+        print("=== IMU Data ===")
+        print(f"Position (world frame)   : [{pos_w[0]:.3f}, {pos_w[1]:.3f}, {pos_w[2]:.3f}]")
+        print(f"Orientation (quat world) : [{quat_w[0]:.3f}, {quat_w[1]:.3f}, {quat_w[2]:.3f}, {quat_w[3]:.3f}]")
+        print(f"Linear velocity (body)   : [{lin_vel_b[0]:.3f}, {lin_vel_b[1]:.3f}, {lin_vel_b[2]:.3f}]")
+        print(f"Angular velocity (body)  : [{ang_vel_b[0]:.3f}, {ang_vel_b[1]:.3f}, {ang_vel_b[2]:.3f}]")
+        print(f"Linear acceleration (b)  : [{lin_acc_b[0]:.3f}, {lin_acc_b[1]:.3f}, {lin_acc_b[2]:.3f}]")
+        print(f"Angular acceleration (b) : [{ang_acc_b[0]:.3f}, {ang_acc_b[1]:.3f}, {ang_acc_b[2]:.3f}]")
+        print("=================")
+
+
         exo_obs = torch.cat(
             (
                 self.joint_pos[:, self._exo_dof_idx[0]].unsqueeze(dim=1),
