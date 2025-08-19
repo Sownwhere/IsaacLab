@@ -8,6 +8,11 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import PhysxCfg,SimulationCfg
 from isaaclab.utils import configclass
 
+from isaaclab.sensors import ImuCfg
+from isaaclab.markers import VisualizationMarkersCfg
+from isaaclab.markers.config import RED_ARROW_X_MARKER_CFG
+from isaaclab.utils import configclass
+# from isaaclab.sensors import ContactSensorCfg
 MOTIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../motions")
 
 @configclass
@@ -50,8 +55,9 @@ class HexoEnvCfg(DirectMARLEnvCfg):
     )
 
 
+
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=3.0, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1, env_spacing=8.0, replicate_physics=True)
 
     # robot
     robot_cfg: ArticulationCfg = HEXO_CFG.replace(prim_path="/World/envs/env_.*/Robot")
@@ -72,6 +78,23 @@ class HexoEnvCfg(DirectMARLEnvCfg):
                           "right_ankle_roll_joint"
                         ]
 
+    # sensors = {
+    #     "leg_imu": ImuCfg(
+    #         prim_path="/World/envs/env_.*/Robot/left_knee_link",  
+    #         update_period=0.01,   # 100 Hz
+    #         history_length=16,
+    #         # visualizer_cfg= RED_ARROW_X_MARKER_CFG.replace(prim_path="Visuals/Command/velocity_goal"),
+    #         visualizer_cfg= RED_ARROW_X_MARKER_CFG.replace(prim_path="/World/envs/env_0/Robot/left_knee_link/IMU_visual")
+            
+
+    #     )
+    # }
+    # contact_forces = ContactSensorCfg(
+    #         prim_path="{ENV_REGEX_NS}/Robot/.*ankle_roll_link", update_period=0.0, history_length=6, debug_vis=True
+    # )
+
+    # sensors["leg_imu"].debug_vis = True
+    # sensors["leg_imu"].offset.pos = (0.0, 0.3, -0.00)  # 调整 IMU 在膝盖上的位置
     # # action scales
     # humanoid_action_scale = 100.0  # [N]
     # exo_action_scale = 50.0  # [Nm]

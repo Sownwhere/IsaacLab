@@ -16,6 +16,8 @@ from isaaclab.assets import Articulation
 from isaaclab.envs import DirectMARLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_rotate
+from isaaclab.sensors import ContactSensorCfg
+from isaaclab.sensors import ContactSensor
 
 from .hexo_env_cfg import HexoEnvCfg
 from ..motions.python import MotionLoader
@@ -81,6 +83,7 @@ class HexoEnv(DirectMARLEnv):
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot_cfg)
+        self.robot.set_debug_vis(True)   
         # add ground plane
         spawn_ground_plane(
             prim_path="/World/ground",
@@ -99,6 +102,19 @@ class HexoEnv(DirectMARLEnv):
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
+
+        # ---------------------------
+        # add contact force sensor
+        # ---------------------------
+        contact_cfg = ContactSensorCfg(
+            prim_path="/World/envs/env_0/Robot/.*ankle_roll_link",   # 绑定到机器人脚部 prim
+            update_period=0.0,     # 每个物理步更新
+            history_length=6,      # 保存多少帧的历史数据
+            debug_vis=True,        # 可视化
+        )
+        self.contact_sensor = ContactSensor(contact_cfg)
+        self.scene.sensors["contact_forces"] = self.contact_sensor
+        
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]):
         self.actions = {k: v.clone() for k, v in actions.items()}
