@@ -118,6 +118,7 @@ class HexoEnv(DirectMARLEnv):
     def _get_observations(self) -> dict[str, torch.Tensor]:
         # humanoid：使用 compute_obs 获取完整观测
         humanoid_obs = compute_obs(
+            self.actions["exo"],
             self.robot.data.joint_pos,
             self.robot.data.joint_vel,
             self.robot.data.body_pos_w[:, self.ref_body_index],
@@ -283,6 +284,7 @@ class HexoEnv(DirectMARLEnv):
         ) = self._motion_loader.sample(num_samples=num_samples, times=times)
         # compute AMP observation
         amp_observation = compute_obs(
+            torch.zeros((dof_positions.shape[0], len(self._exo_dof_idx)), device=dof_positions.device),
             dof_positions[:, self.motion_dof_indexes],
             dof_velocities[:, self.motion_dof_indexes],
             body_positions[:, self.motion_ref_body_index],
@@ -366,7 +368,7 @@ def compute_rewards(
 
     total_reward = {
         "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2 +  rew_distance + rew_slip,
-        "exo":  rew_termination+ rew_action_l2 + rew_exo_torque,
+        "exo":  rew_termination+ rew_action_l2 + rew_exo_torque + rew_termination*2,
     }
     total_reward["exo"] =  torch.zeros_like(total_reward["exo"])
     return total_reward
@@ -384,6 +386,7 @@ def quaternion_to_tangent_and_normal(q: torch.Tensor) -> torch.Tensor:
 
 @torch.jit.script
 def compute_obs(
+    exo_action: torch.Tensor,
     dof_positions: torch.Tensor,
     dof_velocities: torch.Tensor,
     root_positions: torch.Tensor,
@@ -394,6 +397,7 @@ def compute_obs(
 ) -> torch.Tensor:
     obs = torch.cat(
         (
+            exo_action,
             dof_positions,
             dof_velocities,
             root_positions[:, 2:3],  # root body height

@@ -26,11 +26,11 @@ class HexoEnvCfg(DirectMARLEnvCfg):
 
     possible_agents = ["exo", "humanoid" ]
     action_spaces = {"exo": 2, "humanoid": 12}
-    observation_spaces = {"exo": 4, "humanoid": 49+6}
+    observation_spaces = {"exo": 4, "humanoid": 49+6+2}
     state_space = -1
     num_amp_observations = 2
     # 7 + 3 + 3 + 12 + 12+ 12+  12+6
-    amp_observation_space = 49+6 
+    amp_observation_space = 49+6 +2
 
     early_termination = True
     termination_height = 0.5
