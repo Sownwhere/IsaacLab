@@ -122,7 +122,7 @@ class HexoEnv(DirectMARLEnv):
         # set all actions["exo"] are zero
 
         self.robot.set_joint_position_target(
-            self.actions["exo"] *self.action_scale[8:9] + self.action_offset[8:9] , joint_ids=self._exo_dof_idx
+            (self.actions["humanoid"][:,8:10] + self.actions["exo"]) *self.action_scale[8:10] + self.action_offset[8:10] , joint_ids=self._exo_dof_idx
         )
         self.exo_actions = self.actions["exo"]
         
@@ -151,7 +151,8 @@ class HexoEnv(DirectMARLEnv):
         self.amp_observation_buffer[:, 0] = humanoid_obs.clone()  # 最新的放在最前面
         
         applied_torque = self.robot.data.applied_torque 
-
+        # applied_torque = torch.round(applied_torque * 100) / 100
+        # print("applied_torque: ",applied_torque)
         # Then in _get_observations, safely scale it:
         exo_actions =self.actions["exo"].clone()  * 20 if self.actions["exo"] is not None else torch.zeros_like(self.actions["exo"])
         # 存入 extras 供外部使用
@@ -413,7 +414,7 @@ def compute_rewards(
 
     total_reward = {
         "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2 +  rew_distance + rew_slip,
-        "exo":  rew_termination+ rew_action_l2 + rew_exo_torque,
+        "exo": 2 * rew_termination+ rew_action_l2 + rew_exo_torque,
     }
     total_reward["exo"] =  torch.zeros_like(total_reward["exo"])
     return total_reward
