@@ -115,9 +115,9 @@
     <dynamics
       damping="0.001"
       friction="0.001" />
-    <safety_controller
+    <!-- <safety_controller
       k_position="0.5"
-      k_velocity="1" />
+      k_velocity="1" /> -->
   </joint>
   <link
     name="left_leg_roll_link">
@@ -481,7 +481,7 @@
       lower="-1.57"
       upper="1.31"
       effort="300"
-      velocity="32" />
+      velocity="40" />
     <dynamics
       damping="0.001"
       friction="0.001" />
@@ -542,7 +542,7 @@
       lower="-2.9671"
       upper="0.5236"
       effort="200"
-      velocity="20" />
+      velocity="40" />
     <dynamics
       damping="0.001"
       friction="0.001" />
@@ -603,7 +603,7 @@
       lower="-2.7576"
       upper="2.7576"
       effort="200"
-      velocity="12" />
+      velocity="40" />
     <dynamics
       damping="0.001"
       friction="0.001" />
@@ -664,7 +664,7 @@
       lower="-0.01"
       upper="1"
       effort="200"
-      velocity="20" />
+      velocity="40" />
     <dynamics
       damping="0.001"
       friction="0.001" />
@@ -723,7 +723,7 @@
       xyz="0 1 0" />
     <limit
       lower="-0.87267"
-      upper="0.7"
+      upper="0.5236"
       effort="100"
       velocity="40" />
     <dynamics

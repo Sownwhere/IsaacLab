@@ -11,7 +11,9 @@ HEXO_CFG = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=sim_utils.UsdFileCfg(
             # usd_path=os.path.join(CURRENT_DIR, "../usd/bw_static/bw.usd"),
-            usd_path=os.path.join(CURRENT_DIR, "../usd/bw_moveable/bw.usd"),
+            usd_path=os.path.join(CURRENT_DIR, "../usd/bw_modify_joint_limit/bw.usd"),
+            # usd_path=os.path.join(CURRENT_DIR, "../usd/bw_moveable/bw.usd"),
+
             activate_contact_sensors=True,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 disable_gravity=False,
