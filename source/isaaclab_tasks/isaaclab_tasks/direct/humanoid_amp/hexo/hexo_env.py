@@ -50,6 +50,7 @@ class HexoEnv(DirectMARLEnv):
         # DOF and key body indexes  
         # key_body_names = ["base_link"]  
         key_body_names = [ 
+            'base_link',
             # 'left_leg_pitch_link',
             # 'left_leg_roll_link',
             'left_leg_yaw_link',
@@ -122,11 +123,20 @@ class HexoEnv(DirectMARLEnv):
         # set all actions["exo"] are zero
 
         self.robot.set_joint_position_target(
-            (self.actions["humanoid"][:,8:10] + self.actions["exo"]) *self.action_scale[8:10] + self.action_offset[8:10] , joint_ids=self._exo_dof_idx
+            self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10]  , joint_ids=self._exo_dof_idx
+            # +  self.actions["exo"], joint_ids=self._exo_dof_idx
         )
         self.exo_actions = self.actions["exo"]
-        
+        # print("self.action_scale[8:10] ",self.action_scale[8:10] )
+        # print("self.action_offset[8:10] ",self.action_offset[8:10] )
+        # print("self.actions['humanoid'][:,8:10]",self.actions["humanoid"][:,8:10])
 
+        # print("self.actions['exo']",self.actions["exo"])
+        # print("exo position",self.actions["exo"] *self.cfg.exo_action_scale + self.cfg.exo_offset)
+        # print("self.cfg.exo_action_scale",self.cfg.exo_action_scale)
+        # print("self.cfg.exo_offset",self.cfg.exo_offset)
+
+        # print("\n \n ")
 
         # self.robot.set_joint_position_target(
         #     torch.zeros_like(self.actions["humanoid"]) , joint_ids=self._humanoid_dof_idx
@@ -137,6 +147,7 @@ class HexoEnv(DirectMARLEnv):
     def _get_observations(self) -> dict[str, torch.Tensor]:
         # humanoid：使用 compute_obs 获取完整观测
         humanoid_obs = compute_obs(
+            # self.actions["exo"],
             self.robot.data.joint_pos,
             self.robot.data.joint_vel,
             self.robot.data.body_pos_w[:, self.ref_body_index],
@@ -154,7 +165,7 @@ class HexoEnv(DirectMARLEnv):
         # applied_torque = torch.round(applied_torque * 100) / 100
         # print("applied_torque: ",applied_torque)
         # Then in _get_observations, safely scale it:
-        exo_actions =self.actions["exo"].clone()  * 20 if self.actions["exo"] is not None else torch.zeros_like(self.actions["exo"])
+        exo_actions =self.actions["exo"].clone()  * 40 if self.actions["exo"] is not None else torch.zeros_like(self.actions["exo"])
         # 存入 extras 供外部使用
         self.extras = {
             "exo_actions" : exo_actions,
@@ -219,6 +230,7 @@ class HexoEnv(DirectMARLEnv):
             self.cfg.rew_joint_pos_limits,
             self.cfg.rew_joint_acc_l2,
             self.cfg.rew_joint_vel_l2,
+            self.cfg.rew_roll_ang,
             self.terminated_dict,
             self.actions,
             self.robot.data.joint_pos,
@@ -228,8 +240,13 @@ class HexoEnv(DirectMARLEnv):
             self.robot.data.joint_vel,
             self.robot.data.body_com_pos_w,
             self.robot.data.body_com_vel_w,
+            self.robot.data.root_com_quat_w
         )
- 
+        # print("self.robot.data.body_com_pos_w",self.robot.data.body_com_pos_w)
+        # print("self.robot.data.body_com_pos_w.shape",self.robot.data.body_com_pos_w.shape)
+        # print("\n \n")
+        # print("self.robot.data.body_com_pos_w[:,6, 1]",self.robot.data.body_com_pos_w[:,6, 1])
+        # print("self.robot.data.body_com_pos_w[:,12, 1]",self.robot.data.body_com_pos_w[:,12, 1])
         return total_reward
 
     def _get_dones(self) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
@@ -331,6 +348,7 @@ class HexoEnv(DirectMARLEnv):
         ) = self._motion_loader.sample(num_samples=num_samples, times=times)
         # compute AMP observation
         amp_observation = compute_obs(
+            # torch.zeros((dof_positions.shape[0], len(self._exo_dof_idx)), device=dof_positions.device),
             dof_positions[:, self.motion_dof_indexes],
             dof_velocities[:, self.motion_dof_indexes],
             body_positions[:, self.motion_ref_body_index],
@@ -352,9 +370,26 @@ def feet_too_near_humanoid(
     threshold: float = 0.1
 ) -> torch.Tensor:
     # assert joint_pos.shape[-1] == 12
-    distance = torch.norm(body_com_pos_w[:,6, 1] - body_com_pos_w[:, 12, 1], dim=-1)
+    distance = torch.norm(body_com_pos_w[:,11, 1] - body_com_pos_w[:, 12, 1], dim=-1)
 
     return -(threshold - distance).clamp(min=0)
+
+
+
+@torch.jit.script
+def quaternion_to_roll_batch(q: torch.Tensor) -> torch.Tensor:
+    w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
+    sinr_cosp = 2.0 * (w * x + y * z)
+    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+    roll = torch.atan2(sinr_cosp, cosr_cosp)
+    return roll  # shape: [N]
+
+@torch.jit.script
+def base_roll_too_large(    
+    root_rot_w: torch.Tensor,
+    root_roll_reward_scale: float,
+) -> torch.Tensor:
+    return root_roll_reward_scale * normalize_angle(quaternion_to_roll_batch(root_rot_w))
 
 
 
@@ -366,9 +401,9 @@ def feet_slipping(
     threshold: float = 0.01
 ) -> torch.Tensor:
     
-    drifting_left = torch.norm( body_com_lin_vel_w[:,6, 0] + body_com_lin_vel_w[:,6, 1],dim=-1)
+    drifting_left = torch.norm( body_com_lin_vel_w[:,11, 0] + body_com_lin_vel_w[:,11, 1],dim=-1)
     drifting_right = torch.norm( body_com_lin_vel_w[:,12, 0] + body_com_lin_vel_w[:,12, 1],dim=-1)   
-    return -drifting_left*(( threshold - body_com_pos_w[:,6, 2]).clamp(min=0))  - drifting_right*(( threshold - body_com_pos_w[:,12, 2]).clamp(min=0))
+    return -drifting_left*(( threshold - body_com_pos_w[:,11, 2]).clamp(min=0))  - drifting_right*(( threshold - body_com_pos_w[:,12, 2]).clamp(min=0))
   
 
 @torch.jit.script
@@ -379,6 +414,7 @@ def compute_rewards(
     rew_scale_joint_pos_limits: float,
     rew_scale_joint_acc_l2: float,
     rew_scale_joint_vel_l2: float,
+    rew_roll_ang: float,
     terminated_dict: dict[str, torch.Tensor],
     actions: dict[str, torch.Tensor],
     joint_pos: torch.Tensor,
@@ -386,8 +422,9 @@ def compute_rewards(
     exo_torque_limit: float,
     joint_acc: torch.Tensor,
     joint_vel: torch.Tensor,
-    body_com_pos_w:  torch.Tensor,
+    body_com_pos_w:  torch.Tensor,  
     body_com_lin_vel_w: torch.Tensor,
+    root_rot_w: torch.Tensor,
 
 ):
     rew_slip = feet_slipping( body_com_pos_w, body_com_lin_vel_w)
@@ -399,7 +436,7 @@ def compute_rewards(
 
     exo_tor_limits =  (actions["exo"]*40  - exo_torque_limit).clip(min=0.0)
     exo_tor_limits -= (actions["exo"]*40).clip(max=0.0)
-    rew_exo_torque = rew_sacle_exo_torque + torch.sum(exo_tor_limits, dim=1)
+    rew_exo_torque = rew_sacle_exo_torque * torch.sum(exo_tor_limits, dim=1)
     
     out_of_limits = -(joint_pos - soft_joint_pos_limits[:,:,0]).clip(max=0.0)
     out_of_limits += (joint_pos - soft_joint_pos_limits[:,:,1]).clip(min=0.0)
@@ -408,13 +445,15 @@ def compute_rewards(
     rew_joint_acc_l2 = rew_scale_joint_acc_l2 * torch.sum(torch.square(joint_acc), dim=1)
     rew_joint_vel_l2 = rew_scale_joint_vel_l2 * torch.sum(torch.square(joint_vel), dim=1)
 
+    rew_root_roll = base_roll_too_large(root_rot_w, rew_roll_ang)
 
 
 
 
     total_reward = {
-        "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2 +  rew_distance + rew_slip,
-        "exo": 2 * rew_termination+ rew_action_l2 + rew_exo_torque,
+        "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2,
+        #   +  rew_distance + rew_slip,
+        "exo":  rew_termination+ rew_action_l2 + rew_exo_torque,
     }
     total_reward["exo"] =  torch.zeros_like(total_reward["exo"])
     return total_reward
@@ -432,6 +471,7 @@ def quaternion_to_tangent_and_normal(q: torch.Tensor) -> torch.Tensor:
 
 @torch.jit.script
 def compute_obs(
+    # exo_torques: torch.Tensor,
     dof_positions: torch.Tensor,
     dof_velocities: torch.Tensor,
     root_positions: torch.Tensor,
@@ -441,7 +481,8 @@ def compute_obs(
     key_body_positions: torch.Tensor,
 ) -> torch.Tensor:
     obs = torch.cat(
-        (
+        (   
+            # exo_torques,
             dof_positions,
             dof_velocities,
             root_positions[:, 2:3],  # root body height
