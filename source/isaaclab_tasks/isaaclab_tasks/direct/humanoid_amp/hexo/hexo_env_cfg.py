@@ -22,19 +22,25 @@ class HexoEnvCfg(DirectMARLEnvCfg):
     rew_joint_pos_limits = -0.5
     rew_joint_acc_l2 = -0.001
     rew_joint_vel_l2 = -0.001
-    rew_exo_torque = -0.5
+    rew_roll_ang = -0.5
+    rew_exo_torque = 10.0
     exo_torque_limit = 10.0
     # env
     decimation = 2
     episode_length_s = 10.0
 
+    # action
+    exo_action_scale = 10.0
+    exo_offset = 5.0
+
     possible_agents = ["exo", "humanoid" ]
     action_spaces = {"exo": 2, "humanoid": 12}
-    observation_spaces = {"exo": 14, "humanoid": 49+6}
+    # observation_spaces = {"exo": 14, "humanoid": 49+6+2}
+    observation_spaces = {"exo": 14, "humanoid": 49+6 +3}
     state_space = -1
     num_amp_observations = 2
     # 7 + 3 + 3 + 12 + 12+ 12+  12+6
-    amp_observation_space = 49+6 
+    amp_observation_space = 49+6+3
 
     early_termination = True
     termination_height = 0.5
