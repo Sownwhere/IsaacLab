@@ -211,10 +211,10 @@ def main():
         # ----------------------
         # 外骨骼关节
         # ----------------------
-        exo_torque_names = ['left_ankle', 'right_ankle']
+        exo_torque_names = ['left_ankle', 'right_ankle','left_exo', 'right_exo']
 
         # 创建 1 行 2 列的画布（总共 2 个子图）
-        initCanvas(1, 2, 100)
+        initCanvas(2, 2, 100)
         exo_plotters = [Plotter(i, name) for i, name in enumerate(exo_torque_names)]
     # reset environment
     obs, _ = env.reset()
@@ -232,10 +232,9 @@ def main():
             if hasattr(env, "possible_agents"):
        
                 actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
-                # 将actions 的第一项全零
 
-                actions["exo"][:, 0] = actions["humanoid"][:, 8]   # 第 8 个维度 → exo 第 0 项
-                actions["exo"][:, 1] = actions["humanoid"][:, 9]  # 第 9 个维度 → exo 第 1 项
+                # actions["exo"][:, 0] = actions["humanoid"][:, 8]   # 第 8 个维度 → exo 第 0 项
+                # actions["exo"][:, 1] = actions["humanoid"][:, 9]  # 第 9 个维度 → exo 第 1 项
             # - single-agent (deterministic) actions
             else:
                 actions = outputs[-1].get("mean_actions", outputs[0])
@@ -263,9 +262,13 @@ def main():
                 #         )
 
                 # 绘制外骨骼关节
+                exo_plotters[0].plotLine( actions["humanoid"][0, 8].item(),labels=['torque'])
+                exo_plotters[1].plotLine( actions["humanoid"][0, 9].item(),labels=['torque'])
 
-                exo_plotters[0].plotLine( env.extras["exo_actions"][0, 0].item(),labels=['torque'])
-                exo_plotters[1].plotLine( env.extras["exo_actions"][0, 1].item(),labels=['torque'])
+                exo_plotters[2].plotLine( actions["exo"][0, 0].item(),labels=['torque'])
+                exo_plotters[3].plotLine( actions["exo"][0, 1].item(),labels=['torque'])
+                # exo_plotters[2].plotLine( env.extras["exo_actions"][0, 0].item(),labels=['torque'])
+                # exo_plotters[3].plotLine( env.extras["exo_actions"][0, 1].item(),labels=['torque'])
 
 
 
