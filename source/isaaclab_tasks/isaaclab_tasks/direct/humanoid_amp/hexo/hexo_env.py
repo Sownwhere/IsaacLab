@@ -29,8 +29,8 @@ class HexoEnv(DirectMARLEnv):
 
         self._humanoid_dof_idx, _ = self.robot.find_joints(self.cfg.humanoid_dof_name)
         self._exo_dof_idx, _ = self.robot.find_joints(self.cfg.exo_dof_name)
-        print("_humanoid_dof_idx",self._humanoid_dof_idx)
-        print("_exo_dof_idx",self._exo_dof_idx)
+        # print("_humanoid_dof_idx",self._humanoid_dof_idx)
+        # print("_exo_dof_idx",self._exo_dof_idx)
 
         self.joint_pos = self.robot.data.joint_pos
         self.joint_vel = self.robot.data.joint_vel
@@ -40,12 +40,12 @@ class HexoEnv(DirectMARLEnv):
         dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
         self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
         self.action_scale = dof_upper_limits - dof_lower_limits
-        print("self.action_scale:", self.action_scale)
-        print("self.action_offset:", self.action_offset)
+        # print("self.action_scale:", self.action_scale)
+        # print("self.action_offset:", self.action_offset)
         #load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
 
-        print("self._motion_loader:", self._motion_loader)
+        # print("self._motion_loader:", self._motion_loader)
 
         # DOF and key body indexes  
         # key_body_names = ["base_link"]  
@@ -121,9 +121,11 @@ class HexoEnv(DirectMARLEnv):
         )
         # print("humanoid self.actions shape ",self.actions["humanoid"][0])
         # set all actions["exo"] are zero
-
+        
+        #clip exo action
+        self.actions["exo"] = torch.clamp(self.actions["exo"], 0.0, 10.0)
         self.robot.set_joint_position_target(
-            self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10]  , joint_ids=self._exo_dof_idx
+            self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10] +  self.actions["exo"]  , joint_ids=self._exo_dof_idx
             # +  self.actions["exo"], joint_ids=self._exo_dof_idx
         )
         self.exo_actions = self.actions["exo"]
@@ -165,7 +167,7 @@ class HexoEnv(DirectMARLEnv):
         # applied_torque = torch.round(applied_torque * 100) / 100
         # print("applied_torque: ",applied_torque)
         # Then in _get_observations, safely scale it:
-        exo_actions =self.actions["exo"].clone()  * 40 if self.actions["exo"] is not None else torch.zeros_like(self.actions["exo"])
+        exo_actions =self.actions["exo"].clone() if self.actions["exo"] is not None else torch.zeros_like(self.actions["exo"])
         # 存入 extras 供外部使用
         self.extras = {
             "exo_actions" : exo_actions,
@@ -451,7 +453,7 @@ def compute_rewards(
 
 
     total_reward = {
-        "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2,
+        "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2 + rew_root_roll,
         #   +  rew_distance + rew_slip,
         "exo":  rew_termination+ rew_action_l2 + rew_exo_torque,
     }
