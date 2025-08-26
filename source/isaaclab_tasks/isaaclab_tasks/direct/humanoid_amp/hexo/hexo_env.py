@@ -388,12 +388,28 @@ def quaternion_to_roll_batch(q: torch.Tensor) -> torch.Tensor:
     roll = torch.atan2(sinr_cosp, cosr_cosp)
     return roll  # shape: [N]
 
+
+@torch.jit.script
+def quaternion_to_pitch_batch(q: torch.Tensor) -> torch.Tensor:
+    w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
+    sinp = 2.0 * (w * y - z * x)
+    # 处理数值超出范围的情况，避免 asin 报错
+    sinp = torch.clamp(sinp, -1.0, 1.0)
+    pitch = torch.asin(sinp)
+    return pitch  # shape: [N]
 @torch.jit.script
 def base_roll_too_large(    
     root_rot_w: torch.Tensor,
     root_roll_reward_scale: float,
 ) -> torch.Tensor:
     return root_roll_reward_scale * normalize_angle(quaternion_to_roll_batch(root_rot_w))
+
+@torch.jit.script
+def base_pitch_too_large(    
+    root_rot_w: torch.Tensor,
+    root_pitch_reward_scale: float,
+) -> torch.Tensor:
+    return root_pitch_reward_scale * normalize_angle(quaternion_to_pitch_batch(root_rot_w))
 
 
 
@@ -450,12 +466,13 @@ def compute_rewards(
     rew_joint_vel_l2 = rew_scale_joint_vel_l2 * torch.sum(torch.square(joint_vel), dim=1)
 
     rew_root_roll = base_roll_too_large(root_rot_w, rew_roll_ang)
+    rew_root_pitch = base_pitch_too_large(root_rot_w, rew_roll_ang)
 
 
 
 
     total_reward = {
-        "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2 + rew_root_roll,
+        "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2 + rew_root_roll + rew_root_pitch,
         #   +  rew_distance + rew_slip,
         "exo":  rew_termination+ rew_action_l2 + rew_exo_torque,
     }
