@@ -144,6 +144,7 @@ def main():
             log_root_path, run_dir=f".*_{algorithm}_{args_cli.ml_framework}", other_dirs=["checkpoints"]
         )
     log_dir = os.path.dirname(os.path.dirname(resume_path))
+    print(f"[INFO] Loading checkpoint from directory: {log_dir}")
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
@@ -186,13 +187,13 @@ def main():
     # set agent to evaluation mode
     runner.agent.set_running_mode("eval")
 
-    print("dir env ",dir(env))
-    for name in dir(env):
-        attr = getattr(env, name)
-        if callable(attr):
-            print(f"{name}  --> function/method")
-        else:
-            print(f"{name}  --> value: {attr}")
+    # print("dir env ",dir(env))
+    # for name in dir(env):
+    #     attr = getattr(env, name)
+    #     if callable(attr):
+    #         print(f"{name}  --> function/method")
+    #     else:
+    #         print(f"{name}  --> value: {attr}")
 
 
 
@@ -211,10 +212,11 @@ def main():
         # ----------------------
         # 外骨骼关节
         # ----------------------
-        exo_torque_names = ['left_ankle', 'right_ankle','left_exo', 'right_exo']
+        # Update this list to have 6 elements instead of 4
+        exo_torque_names = ['left_ankle', 'right_ankle', 'left_ankle_combined', 'right_ankle_combined', 'left_exo', 'right_exo']
 
-        # 创建 1 行 2 列的画布（总共 2 个子图）
-        initCanvas(2, 2, 100)
+        # 创建 3 行 2 列的画布（总共 2 个子图）
+        initCanvas(3, 2, 100)
         exo_plotters = [Plotter(i, name) for i, name in enumerate(exo_torque_names)]
     # reset environment
     obs, _ = env.reset()
@@ -262,13 +264,12 @@ def main():
                 #         )
 
                 # 绘制外骨骼关节
-                exo_plotters[0].plotLine( actions["humanoid"][0, 8].item(),labels=['torque'])
-                exo_plotters[1].plotLine( actions["humanoid"][0, 9].item(),labels=['torque'])
-
-                exo_plotters[2].plotLine( actions["exo"][0, 0].item(),labels=['torque'])
-                exo_plotters[3].plotLine( actions["exo"][0, 1].item(),labels=['torque'])
-                # exo_plotters[2].plotLine( env.extras["exo_actions"][0, 0].item(),labels=['torque'])
-                # exo_plotters[3].plotLine( env.extras["exo_actions"][0, 1].item(),labels=['torque'])
+                exo_plotters[0].plotLine( env.extras["ankle_actions"][0, 0].item(),labels=['pos'])
+                exo_plotters[1].plotLine( env.extras["ankle_actions"][0, 1].item(),labels=['pos'])
+                exo_plotters[2].plotLine( (env.extras["ankle_actions"][0, 0]+ env.extras["exo_actions"][0, 0]).item(),labels=['pos'])
+                exo_plotters[3].plotLine( (env.extras["ankle_actions"][0, 1]+ env.extras["exo_actions"][0, 1]).item(),labels=['pos'])
+                exo_plotters[4].plotLine( env.extras["exo_actions"][0, 0].item(),labels=['pos'])
+                exo_plotters[5].plotLine( env.extras["exo_actions"][0, 1].item(),labels=['pos'])
 
 
 

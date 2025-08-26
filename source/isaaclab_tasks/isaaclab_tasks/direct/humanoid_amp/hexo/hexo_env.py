@@ -123,9 +123,9 @@ class HexoEnv(DirectMARLEnv):
         # set all actions["exo"] are zero
         
         #clip exo action
-        self.actions["exo"] = torch.clamp(self.actions["exo"], 0.0, 10.0)
+        self.actions["exo"] = torch.clamp(self.actions["exo"], 0.0, 1.0)
         self.robot.set_joint_position_target(
-            self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10] +  self.actions["exo"]  , joint_ids=self._exo_dof_idx
+            self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10] + self.actions["exo"]  , joint_ids=self._exo_dof_idx
             # +  self.actions["exo"], joint_ids=self._exo_dof_idx
         )
         self.exo_actions = self.actions["exo"]
@@ -167,10 +167,12 @@ class HexoEnv(DirectMARLEnv):
         # applied_torque = torch.round(applied_torque * 100) / 100
         # print("applied_torque: ",applied_torque)
         # Then in _get_observations, safely scale it:
-        exo_actions =self.actions["exo"].clone() if self.actions["exo"] is not None else torch.zeros_like(self.actions["exo"])
+        exo_actions = torch.clamp(self.actions["exo"], 0.0, 1.0)  if self.actions["exo"] is not None else torch.zeros_like(self.actions["exo"])
+        ankle_actions = self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10]
         # 存入 extras 供外部使用
         self.extras = {
             "exo_actions" : exo_actions,
+            "ankle_actions": ankle_actions,
             "joint_names" : self.robot.data.joint_names,
             "applied_torque" : applied_torque,
             # "joint_vel": self.robot.data.joint_vel,
