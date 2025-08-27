@@ -18,6 +18,7 @@ from isaaclab.assets import ArticulationCfg
 
 MOTIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../motions")
 
+from isaaclab.sensors import ImuCfg
 
 @configclass
 class BwAmpEnvCfg(DirectRLEnvCfg):
@@ -80,6 +81,27 @@ class BwAmpEnvCfg(DirectRLEnvCfg):
     # robot
     robot: ArticulationCfg = BW_CFG.replace(prim_path="/World/envs/env_.*/Robot")
 
+    right_leg_imu_cfg = ImuCfg(
+
+        prim_path="/World/envs/env_.*/Robot/right_knee_link",  
+        update_period=0.01,   # 100 Hz
+        history_length=16,
+        # visualizer_cfg= RED_ARROW_X_MARKER_CFG.replace(prim_path="Visuals/Command/velocity_goal"),
+        # visualizer_cfg= RED_ARROW_X_MARKER_CFG.replace(prim_path="/World/envs/env_*/Robot/left_knee_link/IMU_visual")
+    )
+    right_leg_imu_cfg.offset.pos = (0.0, 0.0, -0.3)  # 调整 IMU 在膝盖上的位置
+    # leg_imu_cfg.debug_vis = True
+
+
+    left_leg_imu_cfg = ImuCfg(
+
+        prim_path="/World/envs/env_.*/Robot/left_knee_link",  
+        update_period=0.01,   # 100 Hz
+        history_length=16,
+        # visualizer_cfg= RED_ARROW_X_MARKER_CFG.replace(prim_path="Visuals/Command/velocity_goal"),
+        # visualizer_cfg= RED_ARROW_X_M
+    )
+    left_leg_imu_cfg.offset.pos = (0.0, 0.0, -0.3)
 
 # @configclass
 # class BwAmpDanceEnvCfg(BwAmpEnvCfg):
@@ -87,4 +109,4 @@ class BwAmpEnvCfg(DirectRLEnvCfg):
     
 @configclass
 class BwAmpWalkEnvCfg(BwAmpEnvCfg):
-    motion_file = os.path.join(MOTIONS_DIR, "bw_walk_npy/bw.npz")
+    motion_file = os.path.join(MOTIONS_DIR, "bw_walk_npy/bw_20250807_153247.npz")

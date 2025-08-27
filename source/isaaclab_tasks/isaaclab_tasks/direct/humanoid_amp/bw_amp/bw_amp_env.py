@@ -18,6 +18,7 @@ from isaaclab.utils.math import quat_rotate
 from .bw_amp_env_cfg import BwAmpEnvCfg
 from ..motions.python import MotionLoader
 
+from isaaclab.sensors.imu import Imu
 
 class BwAmpEnv(DirectRLEnv):
     cfg: BwAmpEnvCfg
@@ -91,6 +92,13 @@ class BwAmpEnv(DirectRLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
+        left_leg_imu_sensor = Imu(self.cfg.left_leg_imu_cfg)
+        right_leg_imu_sensor = Imu(self.cfg.right_leg_imu_cfg)
+
+        # 注册到场景
+        self.scene.sensors["left_leg_imu"] = left_leg_imu_sensor
+        self.scene.sensors["right_leg_imu"] = right_leg_imu_sensor
+
     def _pre_physics_step(self, actions: torch.Tensor):
         self.actions = actions.clone()
         # self.pre_actions = actions.clone()
@@ -117,7 +125,20 @@ class BwAmpEnv(DirectRLEnv):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
         # build AMP observation
         self.amp_observation_buffer[:, 0] = obs.clone()
-        self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}
+        # self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}
+        applied_torque = self.robot.data.applied_torque 
+        # print("fucking applied_torque: ",applied_torque)
+        self.extras = {
+            "ankle_angle" : self.robot.data.joint_pos[:,8:10],
+            "ankle_torques": applied_torque[:,8:10],
+            "left_imu_lin_acc": self.scene.sensors["left_leg_imu"].data.lin_acc_b,
+            "left_imu_ang_vel":  self.scene.sensors["left_leg_imu"].data.ang_vel_b,
+            "right_imu_lin_acc":  self.scene.sensors["right_leg_imu"].data.lin_acc_b,
+            "right_imu_ang_vel":  self.scene.sensors["right_leg_imu"].data.ang_vel_b,
+            "left_ankle_hight": self.robot.data.body_com_pos_w[:,11, 2],
+            "right_ankle_hight": self.robot.data.body_com_pos_w[:,12, 2],
+
+        }
 
         return {"policy": obs}
 
@@ -139,7 +160,7 @@ class BwAmpEnv(DirectRLEnv):
             self.robot.data.body_com_pos_w,
             self.robot.data.body_com_vel_w,
         )
-        print(" rewward log",reward_log) 
+        # print(" rewward log",reward_log) 
         return total_reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
