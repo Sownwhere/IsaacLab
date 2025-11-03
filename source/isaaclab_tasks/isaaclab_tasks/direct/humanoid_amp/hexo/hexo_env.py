@@ -125,7 +125,7 @@ class HexoEnv(DirectMARLEnv):
         #clip exo action
         self.actions["exo"] = torch.clamp(self.actions["exo"], 0.0, 1.0)
         self.robot.set_joint_position_target(
-            self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10] + self.actions["exo"]  , joint_ids=self._exo_dof_idx
+           0.2*( self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10]) + self.actions["exo"]  , joint_ids=self._exo_dof_idx
             # +  self.actions["exo"], joint_ids=self._exo_dof_idx
         )
         self.exo_actions = self.actions["exo"]
@@ -168,7 +168,7 @@ class HexoEnv(DirectMARLEnv):
         # print("applied_torque: ",applied_torque)
         # Then in _get_observations, safely scale it:
         exo_actions = torch.clamp(self.actions["exo"], 0.0, 1.0)  if self.actions["exo"] is not None else torch.zeros_like(self.actions["exo"])
-        ankle_actions = self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10]
+        ankle_actions = 0.25 * (self.actions["humanoid"][:,8:10] * self.action_scale[8:10] + self.action_offset[8:10])
         # 存入 extras 供外部使用
         self.extras = {
             "exo_actions" : exo_actions,
@@ -244,7 +244,9 @@ class HexoEnv(DirectMARLEnv):
             self.robot.data.joint_vel,
             self.robot.data.body_com_pos_w,
             self.robot.data.body_com_vel_w,
-            self.robot.data.root_com_quat_w
+            self.robot.data.root_com_quat_w,
+            self.action_offset,
+            self.action_scale,
         )
         # print("self.robot.data.body_com_pos_w",self.robot.data.body_com_pos_w)
         # print("self.robot.data.body_com_pos_w.shape",self.robot.data.body_com_pos_w.shape)
@@ -424,7 +426,18 @@ def feet_slipping(
     drifting_left = torch.norm( body_com_lin_vel_w[:,11, 0] + body_com_lin_vel_w[:,11, 1],dim=-1)
     drifting_right = torch.norm( body_com_lin_vel_w[:,12, 0] + body_com_lin_vel_w[:,12, 1],dim=-1)   
     return -drifting_left*(( threshold - body_com_pos_w[:,11, 2]).clamp(min=0))  - drifting_right*(( threshold - body_com_pos_w[:,12, 2]).clamp(min=0))
-  
+
+# reward for feet reducing energy  
+@torch.jit.script
+def feet_reducing_energy(
+    humanoid_ankle_actions: torch.Tensor,
+    actions_scale: torch.Tensor,
+    action_offset: torch.Tensor,
+) -> torch.Tensor:
+    x = humanoid_ankle_actions * actions_scale + action_offset
+    return (x ** 2).sum(dim=1)
+
+
 
 @torch.jit.script
 def compute_rewards(
@@ -445,6 +458,9 @@ def compute_rewards(
     body_com_pos_w:  torch.Tensor,  
     body_com_lin_vel_w: torch.Tensor,
     root_rot_w: torch.Tensor,
+    action_offset: torch.Tensor,
+    action_scale: torch.Tensor,
+
 
 ):
     rew_slip = feet_slipping( body_com_pos_w, body_com_lin_vel_w)
@@ -467,14 +483,14 @@ def compute_rewards(
 
     rew_root_roll = base_roll_too_large(root_rot_w, rew_roll_ang)
     rew_root_pitch = base_pitch_too_large(root_rot_w, rew_roll_ang)
-
-
+    
+    rew_feet_energy = feet_reducing_energy(actions["humanoid"][:,8:10], action_scale[8:10], action_offset[8:10])
 
 
     total_reward = {
         "humanoid": rew_termination + rew_action_l2 + rew_joint_pos_limits + rew_joint_acc_l2 + rew_joint_vel_l2 + rew_root_roll + rew_root_pitch,
         #   +  rew_distance + rew_slip,
-        "exo":  rew_termination+ rew_action_l2 + rew_exo_torque,
+        "exo":  rew_termination+ rew_action_l2 + rew_exo_torque +  rew_feet_energy,
     }
     total_reward["exo"] =  torch.zeros_like(total_reward["exo"])
     return total_reward

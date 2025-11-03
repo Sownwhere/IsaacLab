@@ -255,21 +255,21 @@ def main():
             # print("len(extras[joint_names])",len(extras["joint_names"]))
 
             # if en_plot:
-                # 绘制全身关节
-                # for joint_idx in range(len(plotters)):
-                #     if joint_idx < len(extras["joint_names"]):
-                #         plotters[joint_idx].plotLine(
-                #             env.extras["applied_torque"][0, joint_idx].item(),
-                #             labels=['action']
-                #         )
-
-                # 绘制外骨骼关节
-                # exo_plotters[0].plotLine( env.extras["ankle_torques"][0, 0].item(),labels=['pos'])
-                # exo_plotters[1].plotLine( env.extras["ankle_torques"][0, 1].item(),labels=['pos'])
-                # exo_plotters[2].plotLine( env.extras["left_ankle_hight"][0].item(),labels=['pos'])
-                # exo_plotters[3].plotLine(     env.extras["right_ankle_hight"][0].item(),labels=['pos'])
-                # exo_plotters[4].plotLine( env.extras["ankle_angle"][0, 0].item(),labels=['pos'])
-                # exo_plotters[5].plotLine( env.extras["ankle_angle"][0, 1].item(),labels=['pos'])
+            #     # 绘制全身关节
+            #     # for joint_idx in range(len(plotters)):
+            #     #     if joint_idx < len(extras["joint_names"]):
+            #     #         plotters[joint_idx].plotLine(
+            #     #             env.extras["applied_torque"][0, joint_idx].item(),
+            #     #             labels=['action']
+            #     #         )
+            #     print ("body_vel ",extras["body_vel"][0])
+            #     # 绘制外骨骼关节
+            #     exo_plotters[0].plotLine( env.extras["joint_vel"][0, 0].item(),labels=['rad/s'])
+            #     exo_plotters[1].plotLine( env.extras["joint_vel"][0, 1].item(),labels=['rad/s'])
+            #     exo_plotters[2].plotLine( env.extras["body_vel"][0,0][0].item(),labels=['pos'])
+            #     exo_plotters[3].plotLine( env.extras["body_vel"][0,1][1].item(),labels=['pos'])
+            #     exo_plotters[4].plotLine( env.extras["body_vel"][0, 2][2].item(),labels=['pos'])
+            #     # exo_plotters[5].plotLine( env.extras["ankle_angle"][0, 1].item(),labels=['pos'])
                 
             import csv
             with open("extras_log.csv", "a", newline="") as f:
@@ -282,6 +282,7 @@ def main():
                                 extras["right_imu_ang_vel"].tolist(),
                                 extras["left_ankle_hight"].tolist(),
                                 extras["right_ankle_hight"].tolist(),
+                                extras["joint_vel"].tolist(),
                                 ])
 
 

@@ -128,9 +128,12 @@ class BwAmpEnv(DirectRLEnv):
         # self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}
         applied_torque = self.robot.data.applied_torque 
         # print("fucking applied_torque: ",applied_torque)
+        print("size of body_com_pos_w: ", self.robot.data.body_com_pos_w.shape)
         self.extras = {
             "ankle_angle" : self.robot.data.joint_pos[:,8:10],
             "ankle_torques": applied_torque[:,8:10],
+            "joint_vel": self.robot.data.joint_vel[:,8:10],
+            "body_vel": self.robot.data.body_lin_vel_w,
             "left_imu_lin_acc": self.scene.sensors["left_leg_imu"].data.lin_acc_b,
             "left_imu_ang_vel":  self.scene.sensors["left_leg_imu"].data.ang_vel_b,
             "right_imu_lin_acc":  self.scene.sensors["right_leg_imu"].data.lin_acc_b,
