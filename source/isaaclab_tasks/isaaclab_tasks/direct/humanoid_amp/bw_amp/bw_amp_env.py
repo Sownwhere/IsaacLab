@@ -128,8 +128,9 @@ class BwAmpEnv(DirectRLEnv):
         # self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}
         applied_torque = self.robot.data.applied_torque 
         # print("fucking applied_torque: ",applied_torque)
-        print("size of body_com_pos_w: ", self.robot.data.body_com_pos_w.shape)
+        # print("size of body_com_pos_w: ", self.robot.data.body_com_pos_w.shape)
         self.extras = {
+            "amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size),
             "ankle_angle" : self.robot.data.joint_pos[:,8:10],
             "ankle_torques": applied_torque[:,8:10],
             "joint_vel": self.robot.data.joint_vel[:,8:10],
