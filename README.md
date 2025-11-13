@@ -95,16 +95,16 @@ ln -s ~/IsaacLab/scripts/reinforcement_learning/skrl ~/IsaacLab/
 ```
 ### Train
 ```
-./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Bw --headless
+./isaaclab.sh -p ~/IsaacLab/scripts/reinforcement_learning/skrl/train.py --task Bw --headless
 or
 
-./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task hexo --algorithm MAAMP --headless
+./isaaclab.sh -p ~/IsaacLab/scripts/reinforcement_learning/skrl/train.py --task hexo --algorithm MAAMP --headless
 ```
 ### Eval
 ```
-./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task Bw --num_envs 32 
+./isaaclab.sh -p ~/IsaacLab/scripts/reinforcement_learning/skrl/play.py --task Bw --num_envs 32 
 
-./isaaclab.sh -p ~/IsaacLab/skrl/play.py --task hexo --algorithm MAAMP  --num_envs 36
+./isaaclab.sh -p ~/IsaacLab/scripts/reinforcement_learning/skrl/play.py --task hexo --algorithm MAAMP  --num_envs 36
 ```
 ### TensorBoard
 ```
@@ -145,13 +145,13 @@ Isaac Lab development initiated from the [Orbit](https://isaac-orbit.github.io/)
 gdp@gdp:~/IsaacLab$ conda activate env_isaaclab
 
 
-(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Bw
+(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/scripts/reinforcement_learning/skrl/train.py --task Bw
 
 
 (env_isaaclab) gdp@gdp:~/IsaacLab$ tensorboard --logdir=/home/gdp/IsaacLab/logs/skrl/bw_amp_walk/2025-07-01_09-46-49_ppo_torch --port=6006
 
 
-(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task Isaac-Cart-Double-Pendulum-Direct-v0  --algorithm IPPO
+(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/scripts/reinforcement_learning/skrl/train.py --task Isaac-Cart-Double-Pendulum-Direct-v0  --algorithm IPPO
 
 --algorithm MAPPO
 --algorithm MAAMP
@@ -159,7 +159,7 @@ gdp@gdp:~/IsaacLab$ conda activate env_isaaclab
 
 --task  hexo
 
-(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/skrl/train.py --task  hexo  --num_envs 4  --algorithm MAAMP
+(env_isaaclab) gdp@gdp:~/IsaacLab$ ./isaaclab.sh -p ~/IsaacLab/scripts/reinforcement_learning/skrl/train.py --task  hexo  --num_envs 4  --algorithm MAAMP
 
 --algorithm
 MAAMP
