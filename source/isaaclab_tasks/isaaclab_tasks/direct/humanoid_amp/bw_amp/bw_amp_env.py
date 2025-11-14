@@ -129,7 +129,7 @@ class BwAmpEnv(DirectRLEnv):
         applied_torque = self.robot.data.applied_torque 
         # print("fucking applied_torque: ",applied_torque)
         # print("size of body_com_pos_w: ", self.robot.data.body_com_pos_w.shape)
-        self.extras = {
+        self.extras.update({
             "amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size),
             "ankle_angle" : self.robot.data.joint_pos[:,8:10],
             "ankle_torques": applied_torque[:,8:10],
@@ -142,7 +142,7 @@ class BwAmpEnv(DirectRLEnv):
             "left_ankle_hight": self.robot.data.body_com_pos_w[:,11, 2],
             "right_ankle_hight": self.robot.data.body_com_pos_w[:,12, 2],
 
-        }
+        })
 
         return {"policy": obs}
 
@@ -165,7 +165,7 @@ class BwAmpEnv(DirectRLEnv):
             self.robot.data.body_com_vel_w,
         )
         # print(" rewward log",reward_log) 
-        return total_reward
+        return total_reward , reward_log
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         time_out = self.episode_length_buf >= self.max_episode_length - 1
@@ -361,10 +361,12 @@ def compute_rewards(
     
     
     log = {
-        "rew_termination": (rew_termination).mean(),
-        "rew_action_l2": (rew_action_l2).mean(),
-        "rew_joint_pos_limits": (rew_joint_pos_limits).mean(),
-        "rew_joint_acc_l2": (rew_joint_acc_l2).mean(),
-        "rew_joint_vel_l2": (rew_joint_vel_l2).mean(),
+        "rew_termination": rew_termination,
+        "rew_action_l2": rew_action_l2,
+        "rew_joint_pos_limits": rew_joint_pos_limits,
+        "rew_joint_acc_l2": rew_joint_acc_l2,
+        "rew_joint_vel_l2": rew_joint_vel_l2,
+        "rew_distance": rew_distance,
+        "rew_slip": rew_slip,
         }
     return total_reward, log

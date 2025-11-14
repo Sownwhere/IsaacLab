@@ -306,6 +306,7 @@ class Agent:
         :param timesteps: Number of timesteps
         :type timesteps: int
         """
+
         if self.write_interval > 0:
             # compute the cumulative sum of the rewards and timesteps
             if self._cumulative_rewards is None:
@@ -343,6 +344,39 @@ class Agent:
                 self.tracking_data["Episode / Total timesteps (max)"].append(np.max(track_timesteps))
                 self.tracking_data["Episode / Total timesteps (min)"].append(np.min(track_timesteps))
                 self.tracking_data["Episode / Total timesteps (mean)"].append(np.mean(track_timesteps))
+            
+
+            # ==== Record individual reward terms if they exist in infos ====
+
+            reward_keys = [
+                "rew_termination",
+                "rew_action_l2",
+                "rew_joint_pos_limits",
+                "rew_joint_acc_l2",
+                "rew_joint_vel_l2",
+                "rew_distance",
+                "rew_slip"
+            ]
+
+            if isinstance(infos, dict):
+                for key in reward_keys:
+                    if key in infos:
+                        # infos[key] is typically a tensor with shape [num_envs, 1]
+                        value = infos[key]
+
+                        # Ensure tensor and convert to float
+                        if torch.is_tensor(value):
+                            self.tracking_data[f"Reward details / {key} (mean)"].append(value.mean().item())
+                            self.tracking_data[f"Reward details / {key} (max)"].append(value.max().item())
+                            self.tracking_data[f"Reward details / {key} (min)"].append(value.min().item())
+                        else:
+                            # fallback for non-tensor data
+                            try:
+                                v = float(value)
+                                self.tracking_data[f"Reward details / {key}"].append(v)
+                            except:
+                                pass
+
 
     def set_mode(self, mode: str) -> None:
         """Set the model mode (training or evaluation)

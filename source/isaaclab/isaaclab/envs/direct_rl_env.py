@@ -362,7 +362,7 @@ class DirectRLEnv(gym.Env):
 
         self.reset_terminated[:], self.reset_time_outs[:] = self._get_dones()
         self.reset_buf = self.reset_terminated | self.reset_time_outs
-        self.reward_buf = self._get_rewards()
+        self.reward_buf,self.extras = self._get_rewards()
 
         # -- reset envs that terminated/timed-out and log the episode information
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -374,7 +374,6 @@ class DirectRLEnv(gym.Env):
             # if sensors are added to the scene, make sure we render to reflect changes in reset
             if self.sim.has_rtx_sensors() and self.cfg.rerender_on_reset:
                 self.sim.render()
-
         # post-step: step interval event
         if self.cfg.events:
             if "interval" in self.event_manager.available_modes:
@@ -382,7 +381,6 @@ class DirectRLEnv(gym.Env):
 
         # update observations
         self.obs_buf = self._get_observations()
-
         # add observation noise
         # note: we apply no noise to the state space (since it is used for critic networks)
         if self.cfg.observation_noise_model:
